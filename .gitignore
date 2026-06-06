@@ -1,0 +1,15 @@
+.DS_Store
+node_modules/
+dist/
+
+*.log
+*.ablx
+*.tsbuildinfo
+
+.env
+
+# Extension storage (logs, index.json with sample-library paths, config)
+.live-storage/
+
+# Ableton beta SDK binaries — not redistributed (grab from Ableton)
+vendor/*.tgz
