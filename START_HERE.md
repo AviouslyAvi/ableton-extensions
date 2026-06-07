@@ -48,6 +48,10 @@ Extensions for **Ableton Live** using the **Ableton Extension SDK** (currently `
 
 ## Active threads
 
+- [ ] **Keyswitch** — Phase A–D spike built & verified live in Live 12 Beta (right-click MIDI
+  clip → Apply keyswitch → note inserted). Next: faster apply UX (per-articulation menu items /
+  repeat-last / auto-place at phrase boundaries) — current palette flow too slow.
+  → Resume: `05-handoffs/active/handoff-2026-06-06-keyswitch.md`
 - [ ] **Similar Samples** — Find→take lanes, similarity %, dedup, both Unpack commands, and an
   "Original" A/B lane all built & verified live. Pending: confirm Original auto-skip on unpack,
   then `npm run package`. Next build: "Unpack This Take Lane → Track" (single-lane).
@@ -55,4 +59,4 @@ Extensions for **Ableton Live** using the **Ableton Extension SDK** (currently `
 
 ---
 
-_Last updated: 2026-06-05_
+_Last updated: 2026-06-06_
