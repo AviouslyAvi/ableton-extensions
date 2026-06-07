@@ -6,7 +6,7 @@
     "build": "tsc --noEmit && tsx build.ts",
     "build:dev": "tsx build.ts",
     "start": "tsx build.ts && extensions-cli run --storage-directory .live-storage",
-    "package": "tsc --noEmit && tsx build.ts --production && extensions-cli package"
+    "package": "tsc --noEmit && tsx build.ts --production && extensions-cli package -o ../../dist-extensions/Keyswitch.ablx"
   },
   "dependencies": {
     "@ableton-extensions/sdk": "file:/Users/aviouslyavi/Downloads/extensions-sdk-1.0.0-beta.0/ableton-extensions-sdk-1.0.0-beta.0.tgz"

@@ -6,7 +6,7 @@
     "build": "tsc --noEmit && tsx build.ts",
     "build:dev": "tsx build.ts",
     "start": "tsx build.ts && extensions-cli run --storage-directory .live-storage",
-    "package": "tsc --noEmit && tsx build.ts --production && extensions-cli package",
+    "package": "tsc --noEmit && tsx build.ts --production && extensions-cli package -o ../../dist-extensions/Similar-Samples.ablx",
     "index": "tsx src/indexer.ts"
   },
   "dependencies": {

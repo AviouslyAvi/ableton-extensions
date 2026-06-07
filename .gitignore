@@ -6,6 +6,9 @@ dist/
 *.ablx
 *.tsbuildinfo
 
+# …but DO track the compiled, shippable extensions in the deliverable folder.
+!dist-extensions/*.ablx
+
 .env
 
 # Extension storage (logs, index.json with sample-library paths, config)

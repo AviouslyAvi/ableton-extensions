@@ -1,4 +1,4 @@
-# Keyswitch (experiment)
+# Keyswitch
 
 Proof-of-concept MIDI **keyswitching** extension. A keyswitch is just an ordinary
 low-pitch MIDI note that tells a sample library which articulation to play
@@ -20,9 +20,11 @@ Right-click menus registered:
 
 | Scope | Action | Behaviour |
 |---|---|---|
-| MIDI clip | **Apply keyswitch…** | Palette → insert keyswitch at **clip start** |
+| MIDI clip | **Keyswitch: `<name>`** (one per map entry) | **No modal** — instantly inserts that articulation at **clip start**. The fast path. |
+| MIDI clip / arrangement selection | **Repeat keyswitch: `<name>`** | One click re-applies the **last-used** articulation (clip start, or selection start in the clip under that beat). Label tracks the last sound; persisted across restarts. |
+| MIDI clip | **Apply keyswitch…** | Palette → insert keyswitch at **clip start**. Full-control fallback (lets you tick **Hold**). |
 | MIDI track arrangement selection | **Apply keyswitch at selection…** | Palette → insert at the **selection start**, inside the clip under that beat |
-| MIDI clip / MIDI track | **Edit keyswitch map…** | Edit the articulation→pitch map (persisted) |
+| MIDI clip / MIDI track | **Edit keyswitch map…** | Edit the articulation→pitch map (persisted). Editing the map **live-rebuilds** the per-articulation items — no reload needed. |
 
 - **"Hold for rest of clip"** latches the keyswitch (note held to clip end) instead
   of a short 0.25-beat trigger.
@@ -43,11 +45,12 @@ This typechecks and bundles cleanly (HTML inlined via esbuild's text loader).
 ## Run in Live (your machine — needs Live Beta + .env)
 
 > Requires **Node ≥ 24.14.1** for `npm start` to connect to the Live Extension Host
-> (this workspace currently has Node 22 — bump it before running). Build/typecheck
-> works on Node 22.
+> (this machine's default `node` is now v24). `.env` and `node_modules/` are
+> gitignored, so after a fresh checkout: `npm install`, then create `.env`.
 
 ```bash
-cp .env.example .env          # then set EXTENSION_HOST_PATH=…
+cp .env.example .env          # set EXTENSION_HOST_PATH to the ExtensionHostNodeModule.node
+                              # e.g. /Applications/Ableton Live 12 Beta.app/Contents/Helpers/ExtensionHost/ExtensionHostNodeModule.node
 npm start                     # builds + extensions-cli run --storage-directory .live-storage
 ```
 
@@ -66,8 +69,24 @@ npm start                     # builds + extensions-cli run --storage-directory 
    and relaunch Live → the change persists (written to `.live-storage/articulations.json`).
 5. **Edge cases:** empty clip; time-selection over a gap (no clip → logged no-op,
    nothing inserted); duplicate apply at same pitch+beat (deduped, not stacked).
+6. **Fast-apply (per-articulation):** right-click a MIDI clip → there should be a
+   **Keyswitch: `<name>`** item per map entry. Click one → its note lands at clip
+   start with **no modal**. ← the core speed win.
+7. **Repeat last:** after step 6, **Repeat keyswitch: `<name>`** should show the
+   just-used articulation; clicking it on another clip re-applies it in one click.
+   In Arrangement, **Repeat keyswitch…** on a time-selection drops it at the
+   selection start. Relaunch Live → the label/behaviour persists
+   (`.live-storage/lastKeyswitch.json`).
+8. **Live map rebuild:** **Edit keyswitch map…**, rename/add an entry, Save → the
+   **Keyswitch: `<name>`** items update immediately, no reload.
 
-## Promote
+## Package
 
-Once the in-Live gates pass, copy to `02-extensions/keyswitch/`, finalize
-`manifest.json`, run `npm run package`, and write a handoff.
+`npm run package` builds for production and writes the installable
+`dist-extensions/Keyswitch.ablx` (repo-root folder). Or `npm run package:all`
+from the repo root to rebuild every extension's `.ablx`. Install by dropping the
+`.ablx` onto Live's **Extensions** settings page.
+
+> Status: promoted from `03-experiments/`. The fast-apply items (verification
+> steps 6–8) still need a live confirmation pass — the host didn't reconnect in
+> the session that built them.

@@ -20,7 +20,8 @@
 Extensions for **Ableton Live** using the **Ableton Extension SDK** (currently `1.0.0-beta.0`). Extensions are TypeScript, run in Node.js next to Live, and can manipulate the Live Set (tracks, clips, devices), work with audio/files, register context-menu actions and commands, run transactions, and show WebView UIs.
 
 - **SDK distribution:** `/Users/aviouslyavi/Downloads/extensions-sdk-1.0.0-beta.0/` (api/, docs/, examples/, and the three `.tgz` packages).
-- **Each extension** = its own folder with `manifest.json`, `src/extension.ts`, `build.ts`, `package.json`, `tsconfig.json`. Run with `npm start`.
+- **Each extension** = its own folder under `02-extensions/<name>/` with `manifest.json`, `src/extension.ts`, `build.ts`, `package.json`, `tsconfig.json`. Run with `npm start`.
+- **Compiled builds** = `dist-extensions/<Name>.ablx`, one installable file per extension. Rebuild all with `npm run package:all` from the repo root (or `npm run package` inside one extension). Drop a `.ablx` onto Live's Extensions settings page to install.
 
 ---
 
@@ -48,9 +49,10 @@ Extensions for **Ableton Live** using the **Ableton Extension SDK** (currently `
 
 ## Active threads
 
-- [ ] **Keyswitch** — Phase A–D spike built & verified live in Live 12 Beta (right-click MIDI
-  clip → Apply keyswitch → note inserted). Next: faster apply UX (per-articulation menu items /
-  repeat-last / auto-place at phrase boundaries) — current palette flow too slow.
+- [ ] **Keyswitch** — Promoted to `02-extensions/keyswitch/`. Fast-apply UX built: per-articulation
+  context-menu items (no modal) + repeat-last action, on top of the verified Phase A–D spike.
+  Compiled to `dist-extensions/Keyswitch.ablx`. **Pending: re-test the fast-apply items live**
+  (host didn't reconnect this session) before calling it done.
   → Resume: `05-handoffs/active/handoff-2026-06-06-keyswitch.md`
 - [ ] **Similar Samples** — Find→take lanes, similarity %, dedup, both Unpack commands, and an
   "Original" A/B lane all built & verified live. Pending: confirm Original auto-skip on unpack,
