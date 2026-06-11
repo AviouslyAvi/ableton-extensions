@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Articulation Roll</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    *:not(dialog) { margin: 0; }
+    input, button, select { font: inherit; }
+    :root {
+      --p-live-ui-bg: hsl(0, 0%, 21%);
+      --p-live-control-bg: hsl(0, 0%, 16%);
+      --p-live-input-bg: hsl(0, 0%, 12%);
+      --p-live-text-primary: hsl(0, 0%, 71%);
+      --p-live-control-border: hsl(0, 0%, 7%);
+      --p-live-text-secondary: hsl(0, 0%, 41%);
+      --p-live-accent-primary: hsl(31, 100%, 67%);
+      --p-live-control-text--enabled: hsl(0, 0%, 7%);
+      --c-bg--0500: oklch(from var(--p-live-ui-bg) l c h);
+      --c-text-primary: oklch(from var(--p-live-text-primary) l c h);
+      --c-text-secondary: oklch(from var(--p-live-text-secondary) l c h);
+      --c-control-bg--400: oklch(from var(--p-live-control-bg) calc(l * 0.9) c h);
+      --c-control-bg--500: oklch(from var(--p-live-control-bg) l c h);
+      --c-control-border: oklch(from var(--p-live-control-border) l c h);
+      --c-control-outline: var(--c-text-secondary);
+      --c-control-on-foreground: oklch(from var(--p-live-control-text--enabled) l c h);
+      --c-input-bg-500: oklch(from var(--p-live-input-bg) l c h);
+      --c-highlight--primary: oklch(from var(--p-live-accent-primary) l c h);
+    }
+    html, body { height: 100%; }
+    body {
+      background-color: var(--c-bg--0500);
+      color: var(--c-text-primary);
+      font-family: "AbletonSansSmall", sans-serif;
+      font-size: 11.5px; font-weight: 500;
+      -webkit-font-smoothing: antialiased;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .toolbar {
+      display: flex; align-items: center; gap: 0.5em;
+      padding: 0.4em 0.6em; flex: 0 0 auto;
+      border-bottom: 1px solid var(--c-control-border);
+    }
+    .toolbar .spacer { flex: 1; }
+    .toolbar label { color: var(--c-text-secondary); }
+    .clip-name { color: var(--c-text-primary); font-weight: 600; }
+    .stage { position: relative; flex: 1 1 auto; min-height: 0; }
+    canvas { display: block; width: 100%; height: 100%; cursor: default; }
+
+    .alx-input, select.alx-input {
+      font-size: 1rem; line-height: 1.4;
+      background-color: var(--c-input-bg-500); color: var(--c-text-primary);
+      border: 1px solid var(--c-control-border); height: 20px; padding: 0 0.33em;
+    }
+    .alx-input:focus { outline: 2px solid var(--c-control-outline); }
+    .alx-input.pitch { width: 56px; }
+
+    .alx-button {
+      font-size: 1rem; line-height: 1;
+      background-color: var(--c-control-bg--500); color: var(--c-text-primary);
+      border: 1px solid var(--c-control-border); height: 20px; padding: 0 1em;
+      border-radius: 1em; cursor: pointer; user-select: none; white-space: nowrap;
+    }
+    .alx-button:hover { background-color: var(--c-control-bg--400); }
+    .alx-button:active { color: var(--c-control-on-foreground); background-color: var(--c-highlight--primary); }
+    .alx-button:focus { outline: 2px solid var(--c-control-outline); }
+    .alx-button.small { padding: 0 0.5em; height: 18px; }
+    .alx-button.primary { background-color: var(--c-highlight--primary); color: var(--c-control-on-foreground); }
+    .alx-button.tool.active, .alx-button.toggled { background-color: var(--c-highlight--primary); color: var(--c-control-on-foreground); }
+    .swatch { width: 11px; height: 11px; border-radius: 2px; display: inline-block; vertical-align: -1px; }
+
+    /* Right-click context menu */
+    .ctx-menu {
+      position: absolute; display: none; z-index: 10; min-width: 140px;
+      background: var(--c-control-bg--500); border: 1px solid var(--c-control-border);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5); padding: 3px 0;
+    }
+    .ctx-item { padding: 3px 10px; cursor: pointer; white-space: nowrap; }
+    .ctx-item:hover { background: var(--c-highlight--primary); color: var(--c-control-on-foreground); }
+    .ctx-sep { border-top: 1px solid var(--c-control-border); margin: 3px 0; }
+
+    /* Map editor overlay */
+    .overlay {
+      position: absolute; inset: 0; display: none;
+      background: oklch(from var(--c-bg--0500) l c h / 0.92);
+      padding: 1.25em; overflow: auto;
+    }
+    .overlay.show { display: block; }
+    .overlay h1 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5em; }
+    .overlay p.muted { color: var(--c-text-secondary); margin-bottom: 0.75em; }
+    table { width: 100%; border-collapse: collapse; max-width: 520px; }
+    th { text-align: left; color: var(--c-text-secondary); font-weight: 500; padding-bottom: 0.25em; }
+    td { padding: 2px 6px 2px 0; vertical-align: middle; }
+    td.pname { color: var(--c-text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .buttons { display: flex; gap: 0.5em; margin-top: 0.75em; max-width: 520px; }
+    .buttons .spacer { flex: 1; }
+    .hint { color: var(--c-text-secondary); }
+  </style>
+</head>
+
+<body>
+  <div class="toolbar">
+    <span class="clip-name" id="clip-name">Clip</span>
+    <button class="alx-button small tool" id="tool-mouse" title="Mouse: select / move / resize. Click empty = marker. Double-click empty = place + extend.">Mouse</button>
+    <button class="alx-button small tool" id="tool-pencil" title="Pencil (FL-style): click places a note; drag moves it. Shift while dragging extends. Hold E for Cut.">Pencil</button>
+    <button class="alx-button small tool" id="tool-cut" title="Cut: click/drag across notes to split (hold Cmd/Ctrl to snap). Shortcut: hold E.">Cut</button>
+    <span class="spacer"></span>
+    <label>Articulation</label>
+    <select class="alx-input" id="art-select"></select>
+    <button class="alx-button small" id="selector-toggle" title="Articulation Selector Mode: clicking a note converts it to the current articulation.">Art. select: off</button>
+    <label>Snap</label>
+    <select class="alx-input" id="snap-select">
+      <option value="4">1/1</option>
+      <option value="2">1/2</option>
+      <option value="1">1/4</option>
+      <option value="0.5">1/8</option>
+      <option value="0.25" selected>1/16</option>
+      <option value="0.125">1/32</option>
+      <option value="0">Off</option>
+    </select>
+    <button class="alx-button small" id="zoom-out">−</button>
+    <button class="alx-button small" id="zoom-in">+</button>
+    <button class="alx-button small" id="edit-map">Edit map…</button>
+    <button class="alx-button" id="cancel-btn">Cancel</button>
+    <button class="alx-button primary" id="apply-btn">Apply</button>
+  </div>
+
+  <div class="stage">
+    <canvas id="roll"></canvas>
+
+    <!-- Inline articulation-map editor -->
+    <div class="overlay" id="map-overlay">
+      <h1>Edit articulation map</h1>
+      <p class="muted">Re-pitch these to match your instrument's keyswitch range. Saving reopens the roll.</p>
+      <table>
+        <thead>
+          <tr><th>Articulation</th><th>Pitch</th><th>Note</th><th>Hold</th><th></th></tr>
+        </thead>
+        <tbody id="map-rows"></tbody>
+      </table>
+      <div class="buttons" style="margin-top:0.5em;">
+        <button class="alx-button small" id="map-add">+ Add</button>
+        <span class="spacer"></span>
+        <button class="alx-button" id="map-cancel">Back</button>
+        <button class="alx-button primary" id="map-save">Save</button>
+      </div>
+    </div>
+
+    <!-- Right-click context menu (notes + lane spans) -->
+    <div class="ctx-menu" id="ctx-menu"></div>
+  </div>
+
+  <script>
+    // ---- Injected by the host before the dialog opens ----
+    const DATA = {"schema":"1.1.0","clip":{"name":"Strings (preview)","startTime":16,"duration":16},"grid":{"snap":0.25,"default":0.25},"notes":[{"id":0,"pitch":60,"startTime":0,"duration":1,"velocity":100,"art":"Legato"},{"id":1,"pitch":64,"startTime":1,"duration":0.5,"velocity":90,"art":"Legato"},{"id":2,"pitch":67,"startTime":1.5,"duration":0.5,"velocity":80,"art":"Legato"},{"id":3,"pitch":65,"startTime":2,"duration":0.25,"velocity":110,"art":"Staccato"},{"id":4,"pitch":69,"startTime":2.5,"duration":0.25,"velocity":105,"art":"Staccato"},{"id":5,"pitch":72,"startTime":3,"duration":2,"velocity":95,"art":"Sustain"},{"id":6,"pitch":55,"startTime":6,"duration":1,"velocity":85,"art":null},{"id":7,"pitch":59,"startTime":7,"duration":1,"velocity":88,"art":"Tremolo"},{"id":8,"pitch":62,"startTime":8,"duration":4,"velocity":75,"art":"Tremolo"}],"articulations":[{"name":"Sustain","pitch":0},{"name":"Legato","pitch":1},{"name":"Staccato","pitch":2},{"name":"Spiccato","pitch":3},{"name":"Pizzicato","pitch":4},{"name":"Tremolo","pitch":5,"hold":true},{"name":"Trill","pitch":6,"hold":true},{"name":"Marcato","pitch":7}]};
+
+    const isWebKit = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.live;
+    const isWebView2 = window.chrome && window.chrome.webview;
+    function doSendMessage(message) {
+      if (isWebKit) window.webkit.messageHandlers.live.postMessage(message);
+      else if (isWebView2) window.chrome.webview.postMessage(message);
+    }
+    function closeWith(result) {
+      doSendMessage({ method: "close_and_send", params: [JSON.stringify(result)] });
+    }
+
+    // ---- Pitch <-> name (Live convention: C-2 = MIDI 0, C3 = 60) ----
+    const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    const BLACK = [false, true, false, true, false, false, true, false, true, false, true, false];
+    function pitchName(p) {
+      if (p == null || isNaN(p)) return "";
+      return NAMES[((p % 12) + 12) % 12] + (Math.floor(p / 12) - 2);
+    }
+
+    // ---- Layout constants ----
+    const GUTTER = 44, RULER = 22, LANE = 48;
+    const ROW_H = 12, MIN_PPB = 8, MAX_PPB = 400;
+    const BEATS_PER_BAR = 4;           // display default (4/4)
+    const EDGE = 6;                    // px hot-zone for the resize handle
+
+    // ---- State ----
+    const clipDuration = Math.max(0.25, DATA.clip.duration || 4);
+    let artMap = (DATA.articulations || []).map(a => ({ ...a }));
+    let snap = DATA.grid && DATA.grid.snap != null ? DATA.grid.snap : 0.25;
+    let lastLength = DATA.grid && DATA.grid.default ? DATA.grid.default : 0.25;
+    let currentArt = artMap.length ? artMap[0].name : null;
+
+    let keyCounter = 1;
+    // Melodic notes — keep host-sent fields; `id` (if present) ties back to an
+    // original clip note so untouched fields survive. `_key` is local-only.
+    // `art` (articulation name or null) is the source of truth for keyswitches:
+    // the lane below is derived from it, and Apply groups runs of equal art.
+    let notes = (DATA.notes || []).map(n => ({
+      _key: keyCounter++,
+      id: (typeof n.id === "number" ? n.id : undefined),
+      pitch: n.pitch, startTime: n.startTime, duration: n.duration,
+      velocity: (typeof n.velocity === "number" ? n.velocity : 100),
+      art: (typeof n.art === "string" ? n.art : null),
+    }));
+
+    let selection = new Set();             // selected note _keys
+    let marker = null;                     // insert-marker beat (mouse tool), or null
+    let tool = "mouse";                    // "mouse" | "pencil" | "cut"
+    let eHeldPrevTool = null;              // tool to restore when the held E key is released
+    let selectorMode = false;              // Articulation Selector Mode (click converts note)
+    let undoStack = [], redoStack = [];
+    let previewPaint = null;               // in-progress lane paint {s, e}
+    let pxPerBeat = 64;                    // set to fit in init()
+    let scrollX = 0, scrollY = 0;          // content offsets (px)
+
+    // ---- Undo / redo (snapshot stack) ----
+    const UNDO_MAX = 100;
+    const snapState = () => ({ notes: notes.map(n => ({ ...n })), marker });
+    function pushUndoState(s) {
+      undoStack.push(s);
+      if (undoStack.length > UNDO_MAX) undoStack.shift();
+      redoStack.length = 0;
+    }
+    function pushUndo() { pushUndoState(snapState()); }
+    function restoreState(s) {
+      notes = s.notes.map(n => ({ ...n }));
+      marker = s.marker;
+      selection = new Set([...selection].filter(k => notes.some(n => n._key === k)));
+      requestDraw();
+    }
+    function doUndo() {
+      if (!undoStack.length) return;
+      redoStack.push(snapState());
+      restoreState(undoStack.pop());
+    }
+    function doRedo() {
+      if (!redoStack.length) return;
+      undoStack.push(snapState());
+      restoreState(redoStack.pop());
+    }
+
+    // ---- Derived articulation lane ----
+    // Group notes (sorted by startTime, tie-break pitch asc) into consecutive
+    // runs of equal art; null art breaks a run and emits nothing. MUST mirror
+    // the host's keyswitchesFromNotes so the lane previews exactly what Apply
+    // writes. Span end = next span's start, else the run's furthest note-end.
+    function laneSpans() {
+      const sorted = [...notes].sort((a, b) => (a.startTime - b.startTime) || (a.pitch - b.pitch));
+      const spans = [];
+      let run = null;
+      for (const n of sorted) {
+        if (!n.art) { run = null; continue; }
+        if (run && run.art === n.art) {
+          run.lastEnd = Math.max(run.lastEnd, n.startTime + n.duration);
+        } else {
+          run = { start: n.startTime, lastEnd: n.startTime + n.duration, art: n.art };
+          spans.push(run);
+        }
+      }
+      for (let i = 0; i < spans.length; i++) {
+        spans[i].end = i + 1 < spans.length ? spans[i + 1].start : spans[i].lastEnd;
+      }
+      return spans;
+    }
+
+    // ---- Canvas ----
+    const canvas = document.getElementById("roll");
+    const ctx = canvas.getContext("2d");
+    let viewW = 0, viewH = 0, dpr = 1;
+
+    function resize() {
+      const r = canvas.getBoundingClientRect();
+      dpr = window.devicePixelRatio || 1;
+      viewW = r.width; viewH = r.height;
+      canvas.width = Math.round(viewW * dpr);
+      canvas.height = Math.round(viewH * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      clampScroll();
+      requestDraw();
+    }
+
+    const gridW = () => Math.max(10, viewW - GUTTER);
+    const gridH = () => Math.max(10, viewH - RULER - LANE);
+    const contentH = () => 128 * ROW_H;
+    const contentW = () => clipDuration * pxPerBeat;
+
+    function clampScroll() {
+      scrollX = Math.max(0, Math.min(scrollX, Math.max(0, contentW() - gridW())));
+      scrollY = Math.max(0, Math.min(scrollY, Math.max(0, contentH() - gridH())));
+    }
+
+    // ---- Coordinate transforms ----
+    const beatToX = b => GUTTER - scrollX + b * pxPerBeat;
+    const xToBeat = x => (x - GUTTER + scrollX) / pxPerBeat;
+    const pitchTopY = p => RULER - scrollY + (127 - p) * ROW_H;   // top edge of a pitch row
+    const yToPitch = y => 127 - Math.floor((y - RULER + scrollY) / ROW_H);
+    const snapBeat = b => snap > 0 ? Math.round(b / snap) * snap : b;
+    const clampBeat = b => Math.max(0, Math.min(b, clipDuration));
+
+    // ---- Articulation colors ----
+    function artColor(name, alpha) {
+      const i = Math.max(0, artMap.findIndex(a => a.name === name));
+      const hue = (i * 47) % 360;
+      return `hsl(${hue} 70% 55% / ${alpha == null ? 1 : alpha})`;
+    }
+
+    // ---- Drawing ----
+    let drawPending = false;
+    function requestDraw() {
+      if (drawPending) return;
+      drawPending = true;
+      requestAnimationFrame(() => { drawPending = false; draw(); });
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, viewW, viewH);
+      drawGrid();
+      drawNotes();
+      drawOverlays();
+      drawKeyboard();
+      drawRuler();
+      drawLane();
+      // top-left corner cap
+      ctx.fillStyle = "var(--c-bg--0500)";
+      fillRect(0, 0, GUTTER, RULER, cssVar("--c-bg--0500"));
+    }
+
+    function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+    function fillRect(x, y, w, h, color) { ctx.fillStyle = color; ctx.fillRect(x, y, w, h); }
+
+    function drawGrid() {
+      const gx0 = GUTTER, gy0 = RULER, gh = gridH(), gw = gridW();
+      ctx.save();
+      ctx.beginPath(); ctx.rect(gx0, gy0, gw, gh); ctx.clip();
+
+      // pitch rows (shade black-key rows + octave separators)
+      const topPitch = yToPitch(gy0);
+      const botPitch = yToPitch(gy0 + gh);
+      const rowDark = cssVar("--c-control-bg--400");
+      const line = cssVar("--c-control-border");
+      for (let p = botPitch - 1; p <= topPitch + 1; p++) {
+        if (p < 0 || p > 127) continue;
+        const y = pitchTopY(p);
+        if (BLACK[((p % 12) + 12) % 12]) fillRect(gx0, y, gw, ROW_H, rowDark);
+        if (p % 12 === 0) { ctx.strokeStyle = line; ctx.beginPath(); ctx.moveTo(gx0, y + ROW_H + 0.5); ctx.lineTo(gx0 + gw, y + ROW_H + 0.5); ctx.stroke(); }
+      }
+
+      // vertical beat / bar lines
+      const firstBeat = Math.max(0, Math.floor(xToBeat(gx0)));
+      const lastBeat = Math.ceil(xToBeat(gx0 + gw));
+      const beatStep = pxPerBeat < 24 ? BEATS_PER_BAR : (pxPerBeat < 48 ? 1 : (snap > 0 && snap < 1 ? snap : 1));
+      for (let b = firstBeat; b <= lastBeat; b += beatStep) {
+        const x = beatToX(b);
+        if (x < gx0 - 1 || x > gx0 + gw + 1) continue;
+        const isBar = Math.abs(b % BEATS_PER_BAR) < 1e-6;
+        const isBeat = Math.abs(b - Math.round(b)) < 1e-6;
+        ctx.strokeStyle = isBar ? cssVar("--c-text-secondary") : line;
+        ctx.globalAlpha = isBar ? 0.7 : (isBeat ? 0.5 : 0.25);
+        ctx.beginPath(); ctx.moveTo(Math.round(x) + 0.5, gy0); ctx.lineTo(Math.round(x) + 0.5, gy0 + gh); ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+
+      // clip-end shade (beyond clip length)
+      const endX = beatToX(clipDuration);
+      if (endX < gx0 + gw) fillRect(Math.max(gx0, endX), gy0, gx0 + gw - Math.max(gx0, endX), gh, "rgba(0,0,0,0.28)");
+      ctx.restore();
+    }
+
+    function drawNotes() {
+      const gx0 = GUTTER, gy0 = RULER, gh = gridH(), gw = gridW();
+      ctx.save();
+      ctx.beginPath(); ctx.rect(gx0, gy0, gw, gh); ctx.clip();
+      const accent = cssVar("--c-highlight--primary");
+      const border = cssVar("--c-control-border");
+      for (const n of notes) {
+        const x = beatToX(n.startTime);
+        const w = Math.max(2, n.duration * pxPerBeat);
+        const y = pitchTopY(n.pitch);
+        if (x + w < gx0 || x > gx0 + gw || y + ROW_H < gy0 || y > gy0 + gh) continue;
+        const selected = selection.has(n._key);
+        const a = 0.35 + 0.6 * Math.min(1, (n.velocity || 100) / 127);
+        // Notes are tinted by their articulation (FL "Articulate"-style colors);
+        // un-articulated notes keep the accent color. Selection = accent outline.
+        ctx.fillStyle = n.art
+          ? artColor(n.art, selected ? 1 : a)
+          : (selected ? accent : `oklch(from ${accent} l c h / ${a})`);
+        ctx.fillRect(x, y + 1, w, ROW_H - 2);
+        ctx.strokeStyle = selected ? accent : border;
+        ctx.lineWidth = selected ? 2 : 1;
+        ctx.strokeRect(Math.round(x) + 0.5, Math.round(y + 1) + 0.5, Math.round(w) - 1, ROW_H - 3);
+        ctx.lineWidth = 1;
+      }
+      ctx.restore();
+    }
+
+    // Insert marker + marquee rectangle (drawn over the note grid).
+    function drawOverlays() {
+      const gx0 = GUTTER, gy0 = RULER, gh = gridH(), gw = gridW();
+      ctx.save();
+      ctx.beginPath(); ctx.rect(gx0, gy0, gw, gh); ctx.clip();
+      if (marker != null) {
+        const x = Math.round(beatToX(marker)) + 0.5;
+        ctx.strokeStyle = cssVar("--c-highlight--primary");
+        ctx.globalAlpha = 0.9;
+        ctx.beginPath(); ctx.moveTo(x, gy0); ctx.lineTo(x, gy0 + gh); ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      if (drag && drag.mode === "marquee") {
+        const x0 = Math.min(drag.x0, drag.x1), w = Math.abs(drag.x1 - drag.x0);
+        const y0 = Math.min(drag.y0, drag.y1), h = Math.abs(drag.y1 - drag.y0);
+        ctx.fillStyle = "rgba(255,255,255,0.08)";
+        ctx.fillRect(x0, y0, w, h);
+        ctx.strokeStyle = cssVar("--c-text-secondary");
+        ctx.strokeRect(Math.round(x0) + 0.5, Math.round(y0) + 0.5, Math.round(w), Math.round(h));
+      }
+      ctx.restore();
+    }
+
+    function drawKeyboard() {
+      const gy0 = RULER, gh = gridH();
+      fillRect(0, gy0, GUTTER, gh, cssVar("--c-input-bg-500"));
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0, gy0, GUTTER, gh); ctx.clip();
+      const topPitch = yToPitch(gy0), botPitch = yToPitch(gy0 + gh);
+      for (let p = botPitch - 1; p <= topPitch + 1; p++) {
+        if (p < 0 || p > 127) continue;
+        const y = pitchTopY(p);
+        const black = BLACK[((p % 12) + 12) % 12];
+        fillRect(0, y, GUTTER, ROW_H, black ? cssVar("--c-bg--0500") : cssVar("--c-text-primary"));
+        ctx.strokeStyle = cssVar("--c-control-border");
+        ctx.beginPath(); ctx.moveTo(0, y + ROW_H + 0.5); ctx.lineTo(GUTTER, y + ROW_H + 0.5); ctx.stroke();
+        if (p % 12 === 0) {
+          ctx.fillStyle = cssVar("--c-bg--0500");
+          ctx.font = "9px sans-serif"; ctx.textBaseline = "middle"; ctx.textAlign = "right";
+          ctx.fillText(pitchName(p), GUTTER - 3, y + ROW_H / 2);
+        }
+      }
+      ctx.restore();
+      ctx.strokeStyle = cssVar("--c-control-border");
+      ctx.beginPath(); ctx.moveTo(GUTTER + 0.5, gy0); ctx.lineTo(GUTTER + 0.5, gy0 + gh); ctx.stroke();
+    }
+
+    function drawRuler() {
+      const gw = gridW();
+      fillRect(GUTTER, 0, gw, RULER, cssVar("--c-control-bg--500"));
+      ctx.save();
+      ctx.beginPath(); ctx.rect(GUTTER, 0, gw, RULER); ctx.clip();
+      ctx.fillStyle = cssVar("--c-text-secondary");
+      ctx.font = "9px sans-serif"; ctx.textBaseline = "middle"; ctx.textAlign = "left";
+      const firstBar = Math.floor(xToBeat(GUTTER) / BEATS_PER_BAR);
+      const lastBar = Math.ceil(xToBeat(GUTTER + gw) / BEATS_PER_BAR);
+      for (let bar = firstBar; bar <= lastBar; bar++) {
+        const x = beatToX(bar * BEATS_PER_BAR);
+        if (x < GUTTER - 20 || x > GUTTER + gw) continue;
+        ctx.strokeStyle = cssVar("--c-control-border");
+        ctx.beginPath(); ctx.moveTo(Math.round(x) + 0.5, 0); ctx.lineTo(Math.round(x) + 0.5, RULER); ctx.stroke();
+        ctx.fillText(String(bar + 1), x + 3, RULER / 2);
+      }
+      ctx.restore();
+      ctx.strokeStyle = cssVar("--c-control-border");
+      ctx.beginPath(); ctx.moveTo(GUTTER, RULER + 0.5); ctx.lineTo(GUTTER + gw, RULER + 0.5); ctx.stroke();
+    }
+
+    function drawLane() {
+      const gw = gridW(), y0 = viewH - LANE;
+      fillRect(0, y0, viewW, LANE, cssVar("--c-control-bg--500"));
+      ctx.strokeStyle = cssVar("--c-control-border");
+      ctx.beginPath(); ctx.moveTo(0, y0 + 0.5); ctx.lineTo(viewW, y0 + 0.5); ctx.stroke();
+      // label gutter
+      ctx.fillStyle = cssVar("--c-text-secondary");
+      ctx.font = "9px sans-serif"; ctx.textBaseline = "middle"; ctx.textAlign = "right";
+      ctx.fillText("Artic.", GUTTER - 3, y0 + LANE / 2);
+
+      ctx.save();
+      ctx.beginPath(); ctx.rect(GUTTER, y0, gw, LANE); ctx.clip();
+      const ry = y0 + 6, rh = LANE - 12;
+      // Spans are DERIVED from the notes' art (see laneSpans) — the lane is an
+      // honest preview of the keyswitch runs Apply will write. Painting in it
+      // bulk re-articulates the notes inside the painted span.
+      for (const r of laneSpans()) {
+        const x = beatToX(r.start), w = Math.max(2, (r.end - r.start) * pxPerBeat);
+        if (x + w < GUTTER || x > GUTTER + gw) continue;
+        ctx.fillStyle = artColor(r.art, 0.6);
+        ctx.fillRect(x, ry, w, rh);
+        ctx.strokeStyle = cssVar("--c-control-border");
+        ctx.lineWidth = 1;
+        ctx.strokeRect(Math.round(x) + 0.5, ry + 0.5, Math.round(w) - 1, rh - 1);
+        if (w > 24) {
+          ctx.fillStyle = "rgba(0,0,0,0.85)"; ctx.textAlign = "left";
+          ctx.fillText(r.art, x + 4, ry + rh / 2);
+        }
+      }
+      if (previewPaint) {
+        const x = beatToX(previewPaint.s), w = Math.max(2, (previewPaint.e - previewPaint.s) * pxPerBeat);
+        ctx.fillStyle = artColor(currentArt, 0.4);
+        ctx.fillRect(x, ry, w, rh);
+      }
+      ctx.restore();
+    }
+
+    // ---- Hit testing ----
+    function noteAt(x, y) {
+      for (let i = notes.length - 1; i >= 0; i--) {
+        const n = notes[i];
+        const nx = beatToX(n.startTime), nw = Math.max(2, n.duration * pxPerBeat), ny = pitchTopY(n.pitch);
+        if (x >= nx && x <= nx + nw && y >= ny && y <= ny + ROW_H) {
+          return { note: n, zone: (x >= nx + nw - EDGE && nw > EDGE * 2) ? "resize" : "body" };
+        }
+      }
+      return null;
+    }
+    function spanAt(beat) {
+      for (const s of laneSpans()) {
+        if (beat >= s.start && beat < s.end) return s;
+      }
+      return null;
+    }
+    const keysInRange = (s, e) =>
+      notes.filter(n => n.startTime >= s && n.startTime < e).map(n => n._key);
+
+    const inGrid = (x, y) => x >= GUTTER && y >= RULER && y <= viewH - LANE;
+    const inLane = (x, y) => x >= GUTTER && y >= viewH - LANE;
+
+    // ---- Note helpers ----
+    function placeNote(x, y) {
+      const pitch = Math.max(0, Math.min(127, yToPitch(y)));
+      const start = clampBeat(snapBeat(xToBeat(x)));
+      const n = {
+        _key: keyCounter++, id: undefined, pitch, startTime: start,
+        duration: lastLength, velocity: 100, art: currentArt,
+      };
+      if (n.startTime + n.duration > clipDuration) n.startTime = Math.max(0, clipDuration - n.duration);
+      notes.push(n);
+      selection = new Set([n._key]);
+      return n;
+    }
+
+    // Split a note at `beat`; first half keeps _key/id, second half is new.
+    function splitNote(n, beat, dragRef) {
+      const end = n.startTime + n.duration;
+      if (beat <= n.startTime + 1e-3 || beat >= end - 1e-3) return false;
+      const second = {
+        _key: keyCounter++, id: undefined, pitch: n.pitch,
+        startTime: beat, duration: end - beat, velocity: n.velocity, art: n.art,
+      };
+      n.duration = beat - n.startTime;
+      notes.push(second);
+      if (dragRef) {
+        dragRef.cutKeys.add(n._key);
+        dragRef.cutKeys.add(second._key);
+        dragRef.didCut = true;
+      }
+      return true;
+    }
+
+    function reArt(keys, art) {
+      const set = new Set(keys);
+      const pre = snapState();
+      let any = false;
+      for (const n of notes) {
+        if (set.has(n._key) && n.art !== art) { n.art = art; any = true; }
+      }
+      if (any) { pushUndoState(pre); requestDraw(); }
+    }
+
+    // ---- Interaction ----
+    let drag = null; // { mode, ... }
+    let lastClick = { t: 0, x: -99, y: -99 }; // manual double-press detection
+    const DBL_MS = 350, DBL_PX = 5;
+
+    canvas.addEventListener("contextmenu", e => e.preventDefault());
+
+    canvas.addEventListener("mousedown", e => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left, y = e.clientY - rect.top;
+      hideCtxMenu();
+      if (inLane(x, y)) return onLaneDown(e, x, y);
+      if (!inGrid(x, y)) return;
+      if (e.button === 2) return onRightDown(e, x, y);
+      if (e.button !== 0) return;
+      if (tool === "cut") return onCutDown(e, x, y);
+      if (tool === "pencil") return onPencilDown(e, x, y);
+      onMouseToolDown(e, x, y);
+    });
+
+    function onLaneDown(e, x, y) {
+      const rawBeat = xToBeat(x);
+      const span = spanAt(rawBeat);
+      if (e.button === 2) {
+        // same context menu as notes, targeting every note in the span
+        if (span) showCtxMenu(e, keysInRange(span.start, span.end));
+        return;
+      }
+      if (e.button !== 0) return;
+      const beat = clampBeat(snapBeat(rawBeat));
+      drag = { mode: "paint", start: beat, end: beat, moved: false, hitSpan: span };
+      requestDraw();
+    }
+
+    function onRightDown(e, x, y) {
+      const hit = noteAt(x, y);
+      if (!hit) return;
+      // act on the whole selection when the clicked note is part of it
+      const keys = selection.has(hit.note._key) ? [...selection] : [hit.note._key];
+      showCtxMenu(e, keys);
+    }
+
+    function onMouseToolDown(e, x, y) {
+      const now = performance.now();
+      // dblclick fires after the second mouseup, too late to start a drag —
+      // detect the double press by hand instead.
+      const isDouble = (now - lastClick.t < DBL_MS)
+        && Math.abs(x - lastClick.x) < DBL_PX && Math.abs(y - lastClick.y) < DBL_PX;
+      lastClick = { t: now, x, y };
+
+      const cmd = e.metaKey || e.ctrlKey;
+      const hit = noteAt(x, y);
+
+      if (hit) {
+        const n = hit.note;
+        if (selectorMode && hit.zone === "body" && !e.shiftKey && !cmd) {
+          // Articulation Selector Mode: a plain click converts, never selects
+          if (n.art !== currentArt) { pushUndo(); n.art = currentArt; requestDraw(); }
+          return;
+        }
+        if (e.shiftKey || cmd) {
+          if (selection.has(n._key)) selection.delete(n._key);
+          else selection.add(n._key);
+          requestDraw();
+          return;
+        }
+        lastLength = n.duration;   // adopt length (FL behavior)
+        if (!selection.has(n._key)) selection = new Set([n._key]);
+        if (hit.zone === "resize") {
+          drag = { mode: "resize", note: n, pre: snapState(), changed: false };
+        } else {
+          drag = {
+            mode: "move", anchor: n,
+            grabBeat: xToBeat(x) - n.startTime, grabPitch: yToPitch(y) - n.pitch,
+            origins: new Map([...selection].map(k => {
+              const m = notes.find(q => q._key === k);
+              return [k, { startTime: m.startTime, pitch: m.pitch }];
+            })),
+            pre: snapState(), changed: false,
+          };
+        }
+        requestDraw();
+        return;
+      }
+
+      // empty grid
+      if (cmd) {
+        drag = { mode: "marquee", x0: x, y0: y, x1: x, y1: y };
+        requestDraw();
+        return;
+      }
+      if (isDouble) {
+        // Ableton-style: double-click places, dragging extends (snapped)
+        pushUndo();
+        const n = placeNote(x, y);
+        drag = { mode: "resize", note: n, placed: true };
+        requestDraw();
+        return;
+      }
+      // single click: locator behavior — deselect + snapped insert marker
+      selection.clear();
+      marker = clampBeat(snapBeat(xToBeat(x)));
+      requestDraw();
+    }
+
+    function onPencilDown(e, x, y) {
+      const hit = noteAt(x, y);
+      if (hit) {
+        const n = hit.note;
+        lastLength = n.duration;
+        selection = new Set([n._key]);
+        if (hit.zone === "resize") {
+          drag = { mode: "resize", note: n, pre: snapState(), changed: false };
+        } else {
+          drag = {
+            mode: "move", anchor: n,
+            grabBeat: xToBeat(x) - n.startTime, grabPitch: yToPitch(y) - n.pitch,
+            origins: new Map([[n._key, { startTime: n.startTime, pitch: n.pitch }]]),
+            pre: snapState(), changed: false,
+          };
+        }
+        requestDraw();
+        return;
+      }
+      // FL-style: click places immediately; the drag that follows MOVES it
+      pushUndo();
+      const n = placeNote(x, y);
+      drag = { mode: "pencil-place", note: n };
+      requestDraw();
+    }
+
+    function onCutDown(e, x, y) {
+      drag = { mode: "cut", pre: snapState(), cutKeys: new Set(), didCut: false };
+      cutAt(e, x, y);
+      requestDraw();
+    }
+
+    function cutAt(e, x, y) {
+      const hit = noteAt(x, y);
+      if (!hit || drag.cutKeys.has(hit.note._key)) return;
+      // unsnapped by default; Cmd/Ctrl snaps the cut to the grid
+      const beat = (e.metaKey || e.ctrlKey) ? snapBeat(xToBeat(x)) : xToBeat(x);
+      splitNote(hit.note, beat, drag);
+    }
+
+    window.addEventListener("mousemove", e => {
+      if (!drag) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left, y = e.clientY - rect.top;
+
+      if (drag.mode === "paint") {
+        drag.end = clampBeat(snapBeat(xToBeat(x)));
+        if (Math.abs(drag.end - drag.start) > 1e-6) drag.moved = true;
+        previewPaint = drag.moved ? { s: Math.min(drag.start, drag.end), e: Math.max(drag.start, drag.end) } : null;
+        requestDraw();
+        return;
+      }
+      if (drag.mode === "marquee") {
+        drag.x1 = x; drag.y1 = y;
+        requestDraw();
+        return;
+      }
+      if (drag.mode === "cut") {
+        cutAt(e, x, y);
+        requestDraw();
+        return;
+      }
+      if (drag.mode === "pencil-place") {
+        const n = drag.note;
+        if (e.shiftKey) {
+          // Shift+pencil: extend the right edge, snapped
+          let end = snapBeat(xToBeat(x));
+          end = Math.max(n.startTime + (snap > 0 ? snap : 0.02), end);
+          n.duration = Math.min(end, clipDuration) - n.startTime;
+        } else {
+          // FL-style: the placed note follows the cursor, snapped — no resize,
+          // no velocity change on vertical movement
+          let nb = snapBeat(xToBeat(x));
+          nb = Math.max(0, Math.min(nb, clipDuration - n.duration));
+          n.startTime = nb;
+          n.pitch = Math.max(0, Math.min(127, yToPitch(y)));
+        }
+        requestDraw();
+        return;
+      }
+      if (drag.mode === "move") {
+        // apply one snapped delta to every selected note, clamped so the whole
+        // group stays inside the clip and pitch range
+        const a = drag.anchor;
+        const ao = drag.origins.get(a._key);
+        let nb = snapBeat(xToBeat(x) - drag.grabBeat);
+        nb = Math.max(0, Math.min(nb, clipDuration - a.duration));
+        let dB = nb - ao.startTime;
+        let dP = Math.max(0, Math.min(127, yToPitch(y) - drag.grabPitch)) - ao.pitch;
+        for (const [k, o] of drag.origins) {
+          const n = notes.find(q => q._key === k);
+          if (!n) continue;
+          dB = Math.max(dB, -o.startTime);
+          dB = Math.min(dB, clipDuration - n.duration - o.startTime);
+          dP = Math.max(dP, -o.pitch);
+          dP = Math.min(dP, 127 - o.pitch);
+        }
+        for (const [k, o] of drag.origins) {
+          const n = notes.find(q => q._key === k);
+          if (!n) continue;
+          n.startTime = o.startTime + dB;
+          n.pitch = o.pitch + dP;
+        }
+        if (dB !== 0 || dP !== 0) drag.changed = true;
+        requestDraw();
+        return;
+      }
+      if (drag.mode === "resize") {
+        const n = drag.note;
+        const before = n.duration;
+        let end = snapBeat(xToBeat(x));
+        if (snap > 0) end = Math.max(n.startTime + snap, end);
+        else end = Math.max(n.startTime + 0.02, end);
+        n.duration = Math.min(end, clipDuration) - n.startTime;
+        if (n.duration !== before) drag.changed = true;
+        requestDraw();
+        return;
+      }
+    });
+
+    window.addEventListener("mouseup", () => {
+      if (!drag) return;
+      if (drag.mode === "paint") {
+        if (drag.moved) {
+          const s = Math.min(drag.start, drag.end), eb = Math.max(drag.start, drag.end);
+          // bulk re-articulate every note starting inside the painted span
+          reArt(keysInRange(s, eb), currentArt);
+        } else if (drag.hitSpan) {
+          // click (no drag) on a span: adopt its articulation as current
+          currentArt = drag.hitSpan.art;
+          artSelect.value = currentArt;
+        }
+        previewPaint = null;
+      } else if (drag.mode === "marquee") {
+        const x0 = Math.min(drag.x0, drag.x1), x1 = Math.max(drag.x0, drag.x1);
+        const y0 = Math.min(drag.y0, drag.y1), y1 = Math.max(drag.y0, drag.y1);
+        selection = new Set(notes.filter(n => {
+          const nx = beatToX(n.startTime), nw = Math.max(2, n.duration * pxPerBeat), ny = pitchTopY(n.pitch);
+          return nx <= x1 && nx + nw >= x0 && ny <= y1 && ny + ROW_H >= y0;
+        }).map(n => n._key));
+      } else if (drag.mode === "cut") {
+        if (drag.didCut) pushUndoState(drag.pre);  // one undo step per cut gesture
+      } else if (drag.mode === "resize") {
+        lastLength = drag.note.duration;   // remember the length we just set
+        if (drag.pre && drag.changed) pushUndoState(drag.pre);
+      } else if (drag.mode === "pencil-place") {
+        lastLength = drag.note.duration;
+      } else if (drag.mode === "move") {
+        if (drag.pre && drag.changed) pushUndoState(drag.pre);
+      }
+      drag = null;
+      requestDraw();
+    });
+
+    // wheel: vertical scroll; shift = horizontal; ctrl/cmd = zoom (about cursor)
+    canvas.addEventListener("wheel", e => {
+      e.preventDefault();
+      if (e.ctrlKey || e.metaKey) {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const beatAt = xToBeat(x);
+        const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+        pxPerBeat = Math.max(MIN_PPB, Math.min(MAX_PPB, pxPerBeat * factor));
+        scrollX = beatAt * pxPerBeat - (x - GUTTER);
+      } else if (e.shiftKey) {
+        scrollX += e.deltaY;
+      } else {
+        scrollY += e.deltaY;
+        scrollX += e.deltaX;
+      }
+      clampScroll();
+      requestDraw();
+    }, { passive: false });
+
+    document.addEventListener("keydown", e => {
+      // never hijack keys while the user is typing in an input/select
+      const t = e.target;
+      if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA")) return;
+      if (mapOverlay.classList.contains("show")) {
+        if (e.key === "Escape") closeMapEditor();
+        return;
+      }
+      const cmd = e.metaKey || e.ctrlKey;
+      const k = e.key.toLowerCase();
+
+      if (cmd && k === "z") {
+        e.preventDefault();
+        if (e.shiftKey) doRedo(); else doUndo();
+        return;
+      }
+      if (cmd && k === "a") {
+        e.preventDefault();
+        selection = new Set(notes.map(n => n._key));
+        requestDraw();
+        return;
+      }
+      if (cmd && k === "e") {
+        // one-shot: split the selected notes at the insert marker (snapped)
+        e.preventDefault();
+        if (marker == null || !selection.size) return;
+        const beat = snapBeat(marker);
+        const pre = snapState();
+        let did = false;
+        for (const key of [...selection]) {
+          const n = notes.find(q => q._key === key);
+          if (n && splitNote(n, beat, null)) did = true;
+        }
+        if (did) { pushUndoState(pre); requestDraw(); }
+        return;
+      }
+      if (k === "e" && !e.repeat && !e.altKey) {
+        // hold E = temporary cut tool; restored on keyup / window blur
+        if (eHeldPrevTool === null) { eHeldPrevTool = tool; setTool("cut"); }
+        return;
+      }
+      if (e.key === "Escape") {
+        if (ctxMenu.style.display === "block") { hideCtxMenu(); return; }
+        closeWith({ type: "cancel" });
+        return;
+      }
+      if (e.key === "Delete" || e.key === "Backspace") {
+        if (selection.size) {
+          pushUndo();
+          notes = notes.filter(n => !selection.has(n._key));
+          selection.clear();
+          requestDraw();
+          e.preventDefault();
+        }
+      }
+    });
+
+    document.addEventListener("keyup", e => {
+      if (e.key.toLowerCase() === "e" && eHeldPrevTool !== null) {
+        setTool(eHeldPrevTool);
+        eHeldPrevTool = null;
+      }
+    });
+
+    window.addEventListener("blur", () => {
+      if (eHeldPrevTool !== null) { setTool(eHeldPrevTool); eHeldPrevTool = null; }
+      hideCtxMenu();
+    });
+
+    // ---- Right-click context menu ----
+    const ctxMenu = document.getElementById("ctx-menu");
+
+    function showCtxMenu(e, keys) {
+      if (!keys.length) return;
+      ctxMenu.innerHTML = "";
+      const addItem = (label, swatchColor, fn) => {
+        const d = document.createElement("div");
+        d.className = "ctx-item";
+        if (swatchColor) {
+          const s = document.createElement("span");
+          s.className = "swatch";
+          s.style.background = swatchColor;
+          d.appendChild(s);
+          d.appendChild(document.createTextNode(" "));
+        }
+        d.appendChild(document.createTextNode(label));
+        d.addEventListener("mousedown", ev => ev.stopPropagation());
+        d.addEventListener("click", () => { hideCtxMenu(); fn(); });
+        ctxMenu.appendChild(d);
+      };
+      for (const a of artMap) addItem(a.name, artColor(a.name, 0.9), () => reArt(keys, a.name));
+      addItem("No articulation", "transparent", () => reArt(keys, null));
+      const sep = document.createElement("div");
+      sep.className = "ctx-sep";
+      ctxMenu.appendChild(sep);
+      addItem("Delete", null, () => {
+        pushUndo();
+        const set = new Set(keys);
+        notes = notes.filter(n => !set.has(n._key));
+        selection = new Set([...selection].filter(key => !set.has(key)));
+        requestDraw();
+      });
+      const stage = document.querySelector(".stage").getBoundingClientRect();
+      ctxMenu.style.display = "block";
+      const px = e.clientX - stage.left, py = e.clientY - stage.top;
+      ctxMenu.style.left = Math.max(0, Math.min(px, stage.width - ctxMenu.offsetWidth - 4)) + "px";
+      ctxMenu.style.top = Math.max(0, Math.min(py, stage.height - ctxMenu.offsetHeight - 4)) + "px";
+    }
+    function hideCtxMenu() { ctxMenu.style.display = "none"; }
+
+    // ---- Toolbar ----
+    const artSelect = document.getElementById("art-select");
+    const snapSelect = document.getElementById("snap-select");
+    const mapOverlay = document.getElementById("map-overlay");
+    document.getElementById("clip-name").textContent = DATA.clip.name || "Clip";
+
+    function fillArtSelect() {
+      artSelect.innerHTML = "";
+      artMap.forEach(a => {
+        const o = document.createElement("option");
+        o.value = a.name; o.textContent = a.name;
+        artSelect.appendChild(o);
+      });
+      if (currentArt) artSelect.value = currentArt;
+    }
+    // currentArt only affects NEW notes (and the paint/selector brushes) —
+    // changing it never retroactively re-articulates existing notes.
+    artSelect.addEventListener("change", () => { currentArt = artSelect.value; });
+    snapSelect.addEventListener("change", () => { snap = parseFloat(snapSelect.value); });
+    document.getElementById("zoom-in").onclick = () => { pxPerBeat = Math.min(MAX_PPB, pxPerBeat * 1.25); clampScroll(); requestDraw(); };
+    document.getElementById("zoom-out").onclick = () => { pxPerBeat = Math.max(MIN_PPB, pxPerBeat / 1.25); clampScroll(); requestDraw(); };
+
+    // Tool buttons
+    const toolButtons = {
+      mouse: document.getElementById("tool-mouse"),
+      pencil: document.getElementById("tool-pencil"),
+      cut: document.getElementById("tool-cut"),
+    };
+    function setTool(t) {
+      tool = t;
+      for (const [name, btn] of Object.entries(toolButtons)) btn.classList.toggle("active", name === t);
+      canvas.style.cursor = t === "pencil" ? "crosshair" : (t === "cut" ? "col-resize" : "default");
+      requestDraw();
+    }
+    toolButtons.mouse.onclick = () => setTool("mouse");
+    toolButtons.pencil.onclick = () => setTool("pencil");
+    toolButtons.cut.onclick = () => setTool("cut");
+
+    // Articulation Selector Mode toggle
+    const selectorToggle = document.getElementById("selector-toggle");
+    selectorToggle.onclick = () => {
+      selectorMode = !selectorMode;
+      selectorToggle.classList.toggle("toggled", selectorMode);
+      selectorToggle.textContent = "Art. select: " + (selectorMode ? "on" : "off");
+    };
+
+    document.getElementById("cancel-btn").onclick = () => closeWith({ type: "cancel" });
+    document.getElementById("apply-btn").onclick = () => {
+      closeWith({
+        type: "apply",
+        notes: notes.map(n => {
+          const o = {
+            pitch: n.pitch, startTime: n.startTime, duration: n.duration,
+            velocity: n.velocity, art: n.art ?? null,
+          };
+          if (typeof n.id === "number") o.id = n.id;
+          return o;
+        }),
+      });
+    };
+
+    // ---- Map editor ----
+    document.getElementById("edit-map").onclick = openMapEditor;
+    document.getElementById("map-cancel").onclick = closeMapEditor;
+    document.getElementById("map-add").onclick = () => {
+      const maxPitch = artMap.reduce((m, a) => Math.max(m, a.pitch ?? 0), -1);
+      artMap.push({ name: "New", pitch: Math.min(127, maxPitch + 1) });
+      renderMapRows();
+    };
+    document.getElementById("map-save").onclick = () => closeWith({ type: "save-map", map: artMap });
+
+    function openMapEditor() { renderMapRows(); mapOverlay.classList.add("show"); }
+    function closeMapEditor() { mapOverlay.classList.remove("show"); }
+    function renderMapRows() {
+      const tbody = document.getElementById("map-rows");
+      tbody.innerHTML = "";
+      artMap.forEach((a, i) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML =
+          '<td><input class="alx-input" data-i="' + i + '" data-k="name" value="' + (a.name ?? "") + '" /></td>' +
+          '<td><input class="alx-input pitch" type="number" min="0" max="127" data-i="' + i + '" data-k="pitch" value="' + (a.pitch ?? 0) + '" /></td>' +
+          '<td class="pname">' + pitchName(a.pitch) + '</td>' +
+          '<td><input type="checkbox" data-i="' + i + '" data-k="hold" ' + (a.hold ? "checked" : "") + ' /></td>' +
+          '<td><button class="alx-button small" data-del="' + i + '">✕</button></td>';
+        tbody.appendChild(tr);
+      });
+      tbody.querySelectorAll("input").forEach(el => {
+        el.addEventListener("input", onMapEdit);
+        el.addEventListener("change", onMapEdit);
+      });
+      tbody.querySelectorAll("button[data-del]").forEach(b => {
+        b.onclick = () => { artMap.splice(+b.dataset.del, 1); renderMapRows(); };
+      });
+    }
+    function onMapEdit(e) {
+      const i = +e.target.dataset.i, k = e.target.dataset.k;
+      if (k === "pitch") {
+        artMap[i].pitch = Math.max(0, Math.min(127, +e.target.value || 0));
+        e.target.closest("tr").querySelector(".pname").textContent = pitchName(artMap[i].pitch);
+      } else if (k === "hold") {
+        artMap[i].hold = e.target.checked;
+      } else {
+        artMap[i].name = e.target.value;
+      }
+    }
+
+    // ---- Init ----
+    function init() {
+      fillArtSelect();
+      snapSelect.value = String(snap);
+      setTool("mouse");
+      resize();
+      // fit clip to width
+      pxPerBeat = Math.max(MIN_PPB, Math.min(MAX_PPB, gridW() / clipDuration));
+      // center vertical scroll around the notes (or middle C area)
+      const pitches = notes.map(n => n.pitch);
+      const center = pitches.length ? Math.round(pitches.reduce((a, b) => a + b, 0) / pitches.length) : 72;
+      scrollY = Math.max(0, (127 - center) * ROW_H - gridH() / 2);
+      clampScroll();
+      requestDraw();
+    }
+    window.addEventListener("resize", resize);
+    init();
+  </script>
+</body>
+
+</html>
