@@ -1,0 +1,9 @@
+{
+  "name": "keyswitch-m4l",
+  "private": true,
+  "type": "commonjs",
+  "description": "Scopes this folder to CommonJS so Node unit tests run; Max's v8 object ignores this file.",
+  "scripts": {
+    "test": "node --test"
+  }
+}

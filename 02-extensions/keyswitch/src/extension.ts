@@ -31,6 +31,8 @@ type Articulation = {
 };
 
 const TRIGGER_DURATION = 0.25; // beats, for non-held keyswitches
+const KS_LEAD = 0.02; // beats a keyswitch is nudged before a note onset so it registers first
+const PHRASE_GAP = 1.0; // beats of rest that begins a new phrase (auto-place per phrase)
 const MAP_FILENAME = "articulations.json";
 const LAST_FILENAME = "lastKeyswitch.json";
 
@@ -137,12 +139,27 @@ export function activate(activation: ActivationContext) {
 
   // ---- Keyswitch insertion (shared core) ------------------------------------
 
-  /** Insert `art` into `clip` at clip-relative beat `relStart`, deduping. */
-  const insertKeyswitch = (clip: MidiClip<V>, art: Articulation, relStart: number): void => {
+  /**
+   * Insert `art` into `clip` at clip-relative beat `relStart`, deduping.
+   * `opts.relEnd` paints the keyswitch over an explicit range (start→end), used by
+   * time-selection "apply for a duration"; otherwise `art.hold` latches to clip end,
+   * and the default is a short trigger.
+   */
+  const insertKeyswitch = (
+    clip: MidiClip<V>,
+    art: Articulation,
+    relStart: number,
+    opts?: { relEnd?: number },
+  ): void => {
     const start = Math.max(0, relStart);
-    const duration = art.hold
-      ? Math.max(TRIGGER_DURATION, clip.duration - start)
-      : TRIGGER_DURATION;
+    let duration: number;
+    if (opts?.relEnd !== undefined) {
+      duration = Math.max(TRIGGER_DURATION, opts.relEnd - start);
+    } else if (art.hold) {
+      duration = Math.max(TRIGGER_DURATION, clip.duration - start);
+    } else {
+      duration = TRIGGER_DURATION;
+    }
 
     const ks: NoteDescription = {
       pitch: art.pitch,
@@ -156,17 +173,87 @@ export function activate(activation: ActivationContext) {
       (n) => !(n.pitch === art.pitch && Math.abs(n.startTime - start) < 1e-6),
     );
     clip.notes = [...kept, ks];
+    const span = opts?.relEnd !== undefined ? ` over ${duration.toFixed(2)} beats` : "";
     console.log(
-      `[keyswitch] inserted "${art.name}" (pitch ${art.pitch}) at beat ${start} in "${clip.name}"`,
+      `[keyswitch] inserted "${art.name}" (pitch ${art.pitch}) at beat ${start}${span} in "${clip.name}"`,
     );
   };
 
   /** Insert and record as the last-used keyswitch (drives "repeat last"). */
-  const applyAndRemember = (clip: MidiClip<V>, art: Articulation, relStart: number): void => {
-    insertKeyswitch(clip, art, relStart);
+  const applyAndRemember = (
+    clip: MidiClip<V>,
+    art: Articulation,
+    relStart: number,
+    opts?: { relEnd?: number },
+  ): void => {
+    insertKeyswitch(clip, art, relStart, opts);
     lastUsed = art;
     saveLastUsed(art);
     void refreshRepeatLabel(); // hoisted; reflects the new name in the menu
+  };
+
+  // ---- Bulk placement (auto-place per onset / per phrase) -------------------
+
+  /** Map pitches = the keyswitch range; everything else in a clip is "melodic". */
+  const keyswitchPitches = (): Set<number> => new Set(loadMap().map((a) => a.pitch));
+
+  /** De-duplicated, sorted onset beats of melodic (non-keyswitch) notes. */
+  const melodicOnsets = (clip: MidiClip<V>): number[] => {
+    const ks = keyswitchPitches();
+    const onsets = new Set<number>();
+    for (const n of clip.notes) if (!ks.has(n.pitch)) onsets.add(n.startTime);
+    return [...onsets].sort((a, b) => a - b);
+  };
+
+  /** Phrase-start beats: a melodic note beginning >= PHRASE_GAP after the prior note's end. */
+  const phraseStarts = (clip: MidiClip<V>): number[] => {
+    const ks = keyswitchPitches();
+    const mel = clip.notes
+      .filter((n) => !ks.has(n.pitch))
+      .sort((a, b) => a.startTime - b.startTime);
+    const starts: number[] = [];
+    let prevEnd = Number.NEGATIVE_INFINITY;
+    for (const n of mel) {
+      if (n.startTime - prevEnd >= PHRASE_GAP) starts.push(n.startTime);
+      prevEnd = Math.max(prevEnd, n.startTime + n.duration);
+    }
+    return starts;
+  };
+
+  /**
+   * Place `art` at every beat in `relStarts` in a single `notes` write (cheap, atomic).
+   * `hold` latches each keyswitch to the next placement (clip end for the last); otherwise
+   * a short trigger. Replaces existing notes at the same pitch+start. Returns the count placed.
+   */
+  const placeKeyswitches = (
+    clip: MidiClip<V>,
+    art: Articulation,
+    relStarts: number[],
+    hold: boolean,
+  ): number => {
+    const sorted = relStarts.map((s) => Math.max(0, s)).sort((a, b) => a - b);
+    const uniq: number[] = [];
+    for (const p of sorted) {
+      const last = uniq[uniq.length - 1];
+      if (last === undefined || Math.abs(p - last) > 1e-6) uniq.push(p);
+    }
+    if (!uniq.length) return 0;
+    const kept = clip.notes.filter(
+      (n) => !(n.pitch === art.pitch && uniq.some((u) => Math.abs(n.startTime - u) < 1e-6)),
+    );
+    const additions: NoteDescription[] = uniq.map((start, idx) => {
+      let duration = TRIGGER_DURATION;
+      if (hold) {
+        const next = uniq[idx + 1];
+        duration =
+          next !== undefined
+            ? Math.max(TRIGGER_DURATION, next - start)
+            : Math.max(TRIGGER_DURATION, clip.duration - start);
+      }
+      return { pitch: art.pitch, startTime: start, duration, velocity: art.velocity ?? 100 };
+    });
+    clip.notes = [...kept, ...additions];
+    return additions.length;
   };
 
   // ---- Palette modal --------------------------------------------------------
@@ -221,6 +308,22 @@ export function activate(activation: ActivationContext) {
     return null;
   };
 
+  /**
+   * Resolve a time-selection to its target clip and clip-relative range, clamped to the
+   * clip end so a selection running past the clip doesn't over-extend the keyswitch.
+   * Returns null when no MIDI clip sits under the selection start.
+   */
+  const selectionRange = (
+    selection: ArrangementSelection,
+  ): { clip: MidiClip<V>; relStart: number; relEnd: number } | null => {
+    const beat = selection.time_selection_start;
+    const clip = clipAtBeat(selection, beat);
+    if (!clip) return null;
+    const relStart = beat - clip.startTime;
+    const relEnd = Math.min(selection.time_selection_end, clip.endTime) - clip.startTime;
+    return { clip, relStart, relEnd };
+  };
+
   // ---- Dynamic context-menu items (per-articulation + repeat-last) ----------
   //
   // These items depend on runtime state (the map, the last-used articulation),
@@ -249,7 +352,10 @@ export function activate(activation: ActivationContext) {
     }
   };
 
-  // One "Keyswitch: <name>" item per map entry → applies instantly, no modal.
+  // One item per map entry on each scope → applies instantly, no modal.
+  //  • On a MIDI clip  → inserts at clip start.
+  //  • On a time-selection → paints the articulation over the selected range.
+  // Both point at the same `keyswitch.apply.<i>` command, which duck-types its arg.
   const registerArticulationItems = async (): Promise<void> => {
     await dropItems(articulationItems);
     articulationItems = [];
@@ -257,12 +363,20 @@ export function activate(activation: ActivationContext) {
     for (let i = 0; i < map.length && i < MAX_ARTICULATION_SLOTS; i++) {
       const art = map[i];
       if (!art) continue;
-      const off = await context.ui.registerContextMenuAction(
-        "MidiClip",
-        `Keyswitch: ${art.name}`,
-        `keyswitch.apply.${i}`,
+      articulationItems.push(
+        await context.ui.registerContextMenuAction(
+          "MidiClip",
+          `Keyswitch: ${art.name}`,
+          `keyswitch.apply.${i}`,
+        ),
       );
-      articulationItems.push(off);
+      articulationItems.push(
+        await context.ui.registerContextMenuAction(
+          "MidiTrack.ArrangementSelection",
+          `Keyswitch over selection: ${art.name}`,
+          `keyswitch.apply.${i}`,
+        ),
+      );
     }
   };
 
@@ -272,13 +386,16 @@ export function activate(activation: ActivationContext) {
     await dropItems(repeatItems);
     repeatItems = [];
     const label = lastUsed ? `Repeat keyswitch: ${lastUsed.name}` : "Repeat last keyswitch";
+    const selLabel = lastUsed
+      ? `Repeat keyswitch over selection: ${lastUsed.name}`
+      : "Repeat last keyswitch over selection";
     repeatItems.push(
       await context.ui.registerContextMenuAction("MidiClip", label, "keyswitch.repeatLast"),
     );
     repeatItems.push(
       await context.ui.registerContextMenuAction(
         "MidiTrack.ArrangementSelection",
-        label,
+        selLabel,
         "keyswitch.repeatLast",
       ),
     );
@@ -306,8 +423,19 @@ export function activate(activation: ActivationContext) {
         console.warn(`[keyswitch] no articulation in slot ${i}; nothing inserted`);
         return;
       }
-      const clip = context.getObjectFromHandle(args as Handle, MidiClip);
-      applyAndRemember(clip, art, 0);
+      const maybeSelection = args as Partial<ArrangementSelection>;
+      if (maybeSelection && typeof maybeSelection.time_selection_start === "number") {
+        // Time-selection → paint the articulation over the selected range.
+        const range = selectionRange(args as ArrangementSelection);
+        if (!range) {
+          console.warn("[keyswitch] no MIDI clip under the time-selection; nothing inserted");
+          return;
+        }
+        applyAndRemember(range.clip, art, range.relStart, { relEnd: range.relEnd });
+      } else {
+        const clip = context.getObjectFromHandle(args as Handle, MidiClip);
+        applyAndRemember(clip, art, 0);
+      }
     });
   }
 
@@ -320,14 +448,12 @@ export function activate(activation: ActivationContext) {
     }
     const maybeSelection = args as Partial<ArrangementSelection>;
     if (maybeSelection && typeof maybeSelection.time_selection_start === "number") {
-      const selection = args as ArrangementSelection;
-      const beat = selection.time_selection_start;
-      const clip = clipAtBeat(selection, beat);
-      if (!clip) {
-        console.warn(`[keyswitch] repeat: no MIDI clip under beat ${beat}; nothing inserted`);
+      const range = selectionRange(args as ArrangementSelection);
+      if (!range) {
+        console.warn("[keyswitch] repeat: no MIDI clip under the time-selection; nothing inserted");
         return;
       }
-      applyAndRemember(clip, lastUsed, beat - clip.startTime);
+      applyAndRemember(range.clip, lastUsed, range.relStart, { relEnd: range.relEnd });
     } else {
       const clip = context.getObjectFromHandle(args as Handle, MidiClip);
       applyAndRemember(clip, lastUsed, 0);
@@ -344,22 +470,58 @@ export function activate(activation: ActivationContext) {
     })(),
   );
 
-  // Phase C: apply at an arrangement time-selection start via palette.
+  // Phase C: paint over an arrangement time-selection (start→end) via palette.
   context.commands.registerCommand("keyswitch.applyToSelection", (args: unknown) =>
     void (async () => {
-      const selection = args as ArrangementSelection;
-      const beat = selection.time_selection_start;
-      const clip = clipAtBeat(selection, beat);
-      if (!clip) {
+      const range = selectionRange(args as ArrangementSelection);
+      if (!range) {
         console.warn(
-          `[keyswitch] no MIDI clip under beat ${beat} on the selected lane(s); nothing inserted`,
+          "[keyswitch] no MIDI clip under the time-selection on the selected lane(s); nothing inserted",
         );
         return;
       }
       const result = await openPalette("apply");
       if (result.type === "apply") {
-        applyAndRemember(clip, result.articulation, beat - clip.startTime);
+        applyAndRemember(range.clip, result.articulation, range.relStart, { relEnd: range.relEnd });
       } else if (result.type === "save") void rebuildMenus();
+    })(),
+  );
+
+  // Auto-place: pick an articulation once, then drop it before every melodic note onset.
+  context.commands.registerCommand("keyswitch.autoPlaceOnset", (args: unknown) =>
+    void (async () => {
+      const clip = context.getObjectFromHandle(args as Handle, MidiClip);
+      const result = await openPalette("apply");
+      if (result.type === "save") return void rebuildMenus();
+      if (result.type !== "apply") return;
+      const art = result.articulation;
+      const starts = melodicOnsets(clip).map((o) => Math.max(0, o - KS_LEAD));
+      const count = placeKeyswitches(clip, art, starts, art.hold ?? false);
+      lastUsed = art;
+      saveLastUsed(art);
+      void refreshRepeatLabel();
+      console.log(
+        `[keyswitch] auto-placed "${art.name}" at ${count} note onset(s) in "${clip.name}"`,
+      );
+    })(),
+  );
+
+  // Auto-place: pick an articulation once, then drop it at each phrase start (rest-gap detection).
+  context.commands.registerCommand("keyswitch.autoPlacePhrase", (args: unknown) =>
+    void (async () => {
+      const clip = context.getObjectFromHandle(args as Handle, MidiClip);
+      const result = await openPalette("apply");
+      if (result.type === "save") return void rebuildMenus();
+      if (result.type !== "apply") return;
+      const art = result.articulation;
+      const starts = phraseStarts(clip).map((o) => Math.max(0, o - KS_LEAD));
+      const count = placeKeyswitches(clip, art, starts, art.hold ?? false);
+      lastUsed = art;
+      saveLastUsed(art);
+      void refreshRepeatLabel();
+      console.log(
+        `[keyswitch] auto-placed "${art.name}" at ${count} phrase start(s) in "${clip.name}"`,
+      );
     })(),
   );
 
@@ -379,6 +541,16 @@ export function activate(activation: ActivationContext) {
     "MidiTrack.ArrangementSelection",
     "Apply keyswitch at selection…",
     "keyswitch.applyToSelection",
+  );
+  context.ui.registerContextMenuAction(
+    "MidiClip",
+    "Auto-place keyswitches (per note)…",
+    "keyswitch.autoPlaceOnset",
+  );
+  context.ui.registerContextMenuAction(
+    "MidiClip",
+    "Auto-place keyswitches (per phrase)…",
+    "keyswitch.autoPlacePhrase",
   );
   context.ui.registerContextMenuAction("MidiClip", "Edit keyswitch map…", "keyswitch.editMap");
   context.ui.registerContextMenuAction("MidiTrack", "Edit keyswitch map…", "keyswitch.editMap");

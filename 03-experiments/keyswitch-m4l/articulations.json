@@ -1,0 +1,10 @@
+[
+  { "name": "Sustain", "pitch": 0 },
+  { "name": "Legato", "pitch": 1 },
+  { "name": "Staccato", "pitch": 2 },
+  { "name": "Spiccato", "pitch": 3 },
+  { "name": "Pizzicato", "pitch": 4 },
+  { "name": "Tremolo", "pitch": 5 },
+  { "name": "Trill", "pitch": 6 },
+  { "name": "Marcato", "pitch": 7 }
+]
