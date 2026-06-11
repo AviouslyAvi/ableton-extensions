@@ -58,7 +58,12 @@ Extensions for **Ableton Live** using the **Ableton Extension SDK** (currently `
   "Original" A/B lane all built & verified live. Pending: confirm Original auto-skip on unpack,
   then `npm run package`. Next build: "Unpack This Take Lane → Track" (single-lane).
   → Resume: `05-handoffs/active/handoff-2026-06-05-similar-samples.md`
+- [ ] **Articulation Roll** — FL-style articulation-aware MIDI editor in `02-extensions/articulation-roll/`.
+  Modal canvas piano roll (single-click place + remembered length, region-based articulation lane →
+  keyswitch notes on Apply). **Compiles clean; webview verified in browser.** Pending: `npm start` +
+  in-Live Phase 1/2 checklist (the only step needing Ableton).
+  → Resume: `05-handoffs/active/handoff-2026-06-11-articulation-roll.md`
 
 ---
 
-_Last updated: 2026-06-06_
+_Last updated: 2026-06-11_
