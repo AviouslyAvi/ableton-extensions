@@ -49,10 +49,22 @@ Extensions for **Ableton Live** using the **Ableton Extension SDK** (currently `
 
 ## Active threads
 
-- [ ] **Keyswitch** — Promoted to `02-extensions/keyswitch/`. Fast-apply UX built: per-articulation
-  context-menu items (no modal) + repeat-last action, on top of the verified Phase A–D spike.
-  Compiled to `dist-extensions/Keyswitch.ablx`. **Pending: re-test the fast-apply items live**
-  (host didn't reconnect this session) before calling it done.
+- [ ] **Articulation Roll** — FL-style articulation MIDI editor (modal piano roll).
+  **MERGED TO MAIN** (`9596873`, PR #1) after live-verifying the 13-step checklist and
+  implementing Avi's feedback round same day (marquee-default select, shift-additive,
+  dual-edge relative resize, razor cursor, selection-wide selector mode, Cmd/Ctrl+1/2 grid,
+  native-menu suppression). SDK verdicts: no audio API, fixed modal, no per-note MIDI channel.
+  **Pending:** live-check the text-size bump (uncommitted in the `frosty-solomon-cf8a62`
+  worktree), then commit/push it and delete the worktree. Next build: M4L port spike —
+  `04-plans/articulation-roll-m4l-port.md`; bridge assessment —
+  `04-plans/extension-m4l-bridge-and-plugin.md`.
+  → Resume: `05-handoffs/active/handoff-2026-06-11-articulation-roll.md`
+
+- [ ] **Keyswitch** — Fast-apply + **bulk auto-placement** (per onset / per phrase, ranged
+  apply, KS_LEAD pre-roll) committed (`5a62517` on `keyswitch-fast-apply`, unpushed).
+  New: `03-experiments/keyswitch-m4l/` — M4L v8 spike reading SELECTED notes
+  (`get_selected_notes_extended`), which the SDK can't see. **Pending: live re-test of
+  fast-apply items + the new bulk placement** before calling it done.
   → Resume: `05-handoffs/active/handoff-2026-06-06-keyswitch.md`
 - [ ] **Similar Samples** — Find→take lanes, similarity %, dedup, both Unpack commands, and an
   "Original" A/B lane all built & verified live. Pending: confirm Original auto-skip on unpack,
@@ -61,4 +73,4 @@ Extensions for **Ableton Live** using the **Ableton Extension SDK** (currently `
 
 ---
 
-_Last updated: 2026-06-06_
+_Last updated: 2026-06-11_
