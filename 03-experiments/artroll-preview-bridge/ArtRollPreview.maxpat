@@ -1,0 +1,61 @@
+{
+	"patcher": {
+		"fileversion": 1,
+		"appversion": { "major": 8, "minor": 6, "revision": 0, "architecture": "x64", "modernui": 1 },
+		"classnamespace": "box",
+		"rect": [ 100.0, 100.0, 640.0, 480.0 ],
+		"bglocked": 0,
+		"openinpresentation": 0,
+		"default_fontsize": 12.0,
+		"default_fontface": 0,
+		"default_fontname": "Arial",
+		"gridonopen": 1,
+		"gridsize": [ 15.0, 15.0 ],
+		"boxes": [
+			{ "box": { "id": "obj-c1", "maxclass": "comment", "numinlets": 1, "numoutlets": 0,
+				"patching_rect": [ 30.0, 10.0, 560.0, 20.0 ],
+				"text": "ArtRoll Preview — receives OSC /artroll/note <pitch> <vel> <durMs> <ksPitch> <ksHoldMs> on UDP 7474. Put this device on the edited track, BEFORE the instrument. ksPitch -1 = no keyswitch." } },
+			{ "box": { "id": "obj-1", "maxclass": "newobj", "numinlets": 1, "numoutlets": 1,
+				"outlettype": [ "" ],
+				"patching_rect": [ 30.0, 45.0, 110.0, 22.0 ], "text": "udpreceive 7474" } },
+			{ "box": { "id": "obj-2", "maxclass": "newobj", "numinlets": 1, "numoutlets": 2,
+				"outlettype": [ "", "" ],
+				"patching_rect": [ 30.0, 80.0, 120.0, 22.0 ], "text": "route /artroll/note" } },
+			{ "box": { "id": "obj-3", "maxclass": "newobj", "numinlets": 1, "numoutlets": 5,
+				"outlettype": [ "int", "int", "int", "int", "int" ],
+				"patching_rect": [ 30.0, 115.0, 140.0, 22.0 ], "text": "unpack 0 0 0 0 0" } },
+			{ "box": { "id": "obj-ksgate", "maxclass": "newobj", "numinlets": 1, "numoutlets": 1,
+				"outlettype": [ "int" ],
+				"patching_rect": [ 250.0, 155.0, 80.0, 22.0 ], "text": "if $i1 >= 0 then $i1" } },
+			{ "box": { "id": "obj-ksmn", "maxclass": "newobj", "numinlets": 3, "numoutlets": 2,
+				"outlettype": [ "int", "int" ],
+				"patching_rect": [ 250.0, 230.0, 110.0, 22.0 ], "text": "makenote 100 150" } },
+			{ "box": { "id": "obj-pipe", "maxclass": "newobj", "numinlets": 2, "numoutlets": 1,
+				"outlettype": [ "int" ],
+				"patching_rect": [ 30.0, 190.0, 55.0, 22.0 ], "text": "pipe 5" } },
+			{ "box": { "id": "obj-mn", "maxclass": "newobj", "numinlets": 3, "numoutlets": 2,
+				"outlettype": [ "int", "int" ],
+				"patching_rect": [ 30.0, 230.0, 110.0, 22.0 ], "text": "makenote 100 300" } },
+			{ "box": { "id": "obj-out", "maxclass": "newobj", "numinlets": 3, "numoutlets": 0,
+				"patching_rect": [ 30.0, 270.0, 70.0, 22.0 ], "text": "noteout" } }
+		],
+		"lines": [
+			{ "patchline": { "source": [ "obj-1", 0 ], "destination": [ "obj-2", 0 ] } },
+			{ "patchline": { "source": [ "obj-2", 0 ], "destination": [ "obj-3", 0 ] } },
+
+			{ "patchline": { "source": [ "obj-3", 0 ], "destination": [ "obj-pipe", 0 ] } },
+			{ "patchline": { "source": [ "obj-3", 1 ], "destination": [ "obj-mn", 1 ] } },
+			{ "patchline": { "source": [ "obj-3", 2 ], "destination": [ "obj-mn", 2 ] } },
+			{ "patchline": { "source": [ "obj-pipe", 0 ], "destination": [ "obj-mn", 0 ] } },
+			{ "patchline": { "source": [ "obj-mn", 0 ], "destination": [ "obj-out", 0 ] } },
+			{ "patchline": { "source": [ "obj-mn", 1 ], "destination": [ "obj-out", 1 ] } },
+
+			{ "patchline": { "source": [ "obj-3", 1 ], "destination": [ "obj-ksmn", 1 ] } },
+			{ "patchline": { "source": [ "obj-3", 3 ], "destination": [ "obj-ksgate", 0 ] } },
+			{ "patchline": { "source": [ "obj-3", 4 ], "destination": [ "obj-ksmn", 2 ] } },
+			{ "patchline": { "source": [ "obj-ksgate", 0 ], "destination": [ "obj-ksmn", 0 ] } },
+			{ "patchline": { "source": [ "obj-ksmn", 0 ], "destination": [ "obj-out", 0 ] } },
+			{ "patchline": { "source": [ "obj-ksmn", 1 ], "destination": [ "obj-out", 1 ] } }
+		]
+	}
+}

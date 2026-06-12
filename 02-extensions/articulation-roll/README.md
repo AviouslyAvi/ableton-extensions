@@ -158,6 +158,22 @@ npm run package               # → ../../dist-extensions/ArticulationRoll.ablx
 > it in once: `ln -sfn "<repo>/vendor" vendor` at the worktree root. In the main
 > checkout `../../vendor/` resolves natively and no symlink is needed.
 
+### Audible note preview (optional, one-time setup)
+
+The SDK has no audio API, so preview rides a localhost bridge instead
+(ADR: `01-decisions/2026-06-11-artroll-preview-network-side-channel.md`):
+clicking/placing/dragging notes in the roll sends
+`pitch vel durMs ksPitch ksHoldMs` over WebSocket (fetch/img fallback) to the
+extension host on `127.0.0.1:7475`, which fires an OSC datagram
+(`/artroll/note`, UDP `7474`) at the **ArtRollPreview** helper device — which
+plays keyswitch-then-note through the track's real instrument.
+
+Setup: drop `ArtRollPreview.maxpat` (in this folder) on the edited track as a
+Max MIDI Effect, **before the instrument**. No device → the roll is simply
+silent, exactly as before. The `● preview` toolbar dot turns green when the
+webview's WebSocket reaches the host (it can be green with no device on the
+track — it reports the webview→host hop only).
+
 ### Previewing the UI without Live
 A standalone, data-injected copy of the roll lives at
 `03-experiments/roll-spike/preview.html` — open it in any browser to see and click

@@ -97,12 +97,15 @@
     .buttons { display: flex; gap: 0.5em; margin-top: 0.75em; max-width: 520px; }
     .buttons .spacer { flex: 1; }
     .hint { color: var(--c-text-secondary); }
+    .preview-ind { font-size: 11px; color: var(--c-text-secondary); user-select: none; white-space: nowrap; }
+    .preview-ind.on { color: #7c5; }
   </style>
 </head>
 
 <body>
   <div class="toolbar">
     <span class="clip-name" id="clip-name">Clip</span>
+    <span class="preview-ind" id="preview-ind" title="Audible note preview. Needs the ArtRoll Preview device (Max MIDI Effect) on this track, before the instrument. Green = bridge connected.">● preview</span>
     <button class="alx-button small tool" id="tool-mouse" title="Mouse: drag empty = select (Shift adds). Click empty = marker. Double-click empty = place + extend. Drag a note edge = resize (Shift = uniform).">Mouse</button>
     <button class="alx-button small tool" id="tool-pencil" title="Pencil (FL-style): click places a note; drag moves it. Shift while dragging extends. Hold E for Cut.">Pencil</button>
     <button class="alx-button small tool" id="tool-cut" title="Cut: click/drag across notes to split (hold Cmd/Ctrl to snap). Shortcut: hold E.">Cut</button>
@@ -165,6 +168,43 @@
     function closeWith(result) {
       doSendMessage({ method: "close_and_send", params: [JSON.stringify(result)] });
     }
+
+    // ---- Preview bridge (host side-channel; probe-verified 2026-06-11) ----
+    // The SDK protocol only knows close_and_send, but the modal is a real
+    // webview: WebSocket/fetch/img to the host's localhost server all escape
+    // it mid-modal. WS preferred (gives us connected-state); fetch then img
+    // beacon as fallbacks. Failure mode is silence, never an error dialog.
+    const PV_PORT = 7475;
+    const PV_DUR_MS = 250;       // fixed preview length (tempo isn't in DATA)
+    const PV_KS_TAP_MS = 120;    // non-held keyswitch tap
+    let pvWs = null;
+    function pvSetStatus(on) {
+      const el = document.getElementById("preview-ind");
+      if (el) el.className = "preview-ind" + (on ? " on" : "");
+    }
+    function pvConnect() {
+      try {
+        const sock = new WebSocket("ws://127.0.0.1:" + PV_PORT);
+        sock.onopen = () => { pvWs = sock; pvSetStatus(true); };
+        sock.onclose = () => { if (pvWs === sock) { pvWs = null; pvSetStatus(false); } };
+        sock.onerror = () => {};
+      } catch (e) { /* no bridge — editor works silently as before */ }
+    }
+    function previewNote(n) {
+      const a = n.art ? artMap.find(m => m.name === n.art) : null;
+      const ksPitch = a ? a.pitch : -1;
+      const ksHold = a && a.hold ? PV_DUR_MS : PV_KS_TAP_MS;
+      const vel = typeof n.velocity === "number" ? n.velocity : 100;
+      if (pvWs && pvWs.readyState === 1) {
+        pvWs.send("note " + n.pitch + " " + vel + " " + PV_DUR_MS + " " + ksPitch + " " + ksHold);
+        return;
+      }
+      const q = "/note?pitch=" + n.pitch + "&vel=" + vel + "&dur=" + PV_DUR_MS
+        + "&ks=" + ksPitch + "&ksHold=" + ksHold;
+      fetch("http://127.0.0.1:" + PV_PORT + q)
+        .catch(() => { new Image().src = "http://127.0.0.1:" + PV_PORT + q + "&ch=img"; });
+    }
+    pvConnect();
 
     // ---- Pitch <-> name (Live convention: C-2 = MIDI 0, C3 = 60) ----
     const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -534,6 +574,7 @@
       if (n.startTime + n.duration > clipDuration) n.startTime = Math.max(0, clipDuration - n.duration);
       notes.push(n);
       selection = new Set([n._key]);
+      previewNote(n);
       return n;
     }
 
@@ -559,10 +600,12 @@
       const set = new Set(keys);
       const pre = snapState();
       let any = false;
+      let first = null;
       for (const n of notes) {
-        if (set.has(n._key) && n.art !== art) { n.art = art; any = true; }
+        if (set.has(n._key) && n.art !== art) { n.art = art; any = true; if (!first) first = n; }
       }
-      if (any) { pushUndoState(pre); requestDraw(); }
+      // hear the converted articulation immediately (first note stands in)
+      if (any) { pushUndoState(pre); previewNote(first); requestDraw(); }
     }
 
     // ---- Interaction ----
@@ -643,6 +686,7 @@
           return;
         }
         lastLength = n.duration;   // adopt length (FL behavior)
+        if (hit.zone === "body") previewNote(n);
         if (!selection.has(n._key)) selection = new Set([n._key]);
         if (hit.zone === "resize-r" || hit.zone === "resize-l") {
           drag = startResizeDrag(n, hit.zone === "resize-l" ? "l" : "r");
@@ -696,6 +740,7 @@
       if (hit) {
         const n = hit.note;
         lastLength = n.duration;
+        if (hit.zone === "body") previewNote(n);
         selection = new Set([n._key]);
         if (hit.zone === "resize-r" || hit.zone === "resize-l") {
           drag = startResizeDrag(n, hit.zone === "resize-l" ? "l" : "r");
@@ -777,6 +822,8 @@
           nb = Math.max(0, Math.min(nb, clipDuration - n.duration));
           n.startTime = nb;
           n.pitch = Math.max(0, Math.min(127, yToPitch(y)));
+          if (drag.pvPitch === undefined) drag.pvPitch = n.pitch;
+          if (n.pitch !== drag.pvPitch) { drag.pvPitch = n.pitch; previewNote(n); }
         }
         requestDraw();
         return;
@@ -805,6 +852,9 @@
           n.pitch = o.pitch + dP;
         }
         if (dB !== 0 || dP !== 0) drag.changed = true;
+        // audible pitch feedback while dragging (anchor note stands in)
+        if (drag.pvPitch === undefined) drag.pvPitch = ao.pitch;
+        if (a.pitch !== drag.pvPitch) { drag.pvPitch = a.pitch; previewNote(a); }
         requestDraw();
         return;
       }

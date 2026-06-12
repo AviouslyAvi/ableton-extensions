@@ -6,6 +6,8 @@ import {
   type NoteDescription,
 } from "@ableton-extensions/sdk";
 import * as fs from "node:fs";
+
+import { startPreviewBridge } from "./preview.js";
 import * as path from "node:path";
 
 // esbuild inlines this as a string (see build.ts `.html` text loader).
@@ -239,6 +241,17 @@ export function activate(activation: ActivationContext) {
 
   /** Open the roll for a clip; loops so a map edit re-opens with fresh data. */
   const openRoll = async (clip: MidiClip<V>): Promise<void> => {
+    // Audible preview for the modal session (webview -> :7475 -> UDP :7474 ->
+    // ArtRollPreview.amxd). Inert if the device/ports are absent.
+    const preview = startPreviewBridge();
+    try {
+      await openRollLoop(clip);
+    } finally {
+      preview.close();
+    }
+  };
+
+  const openRollLoop = async (clip: MidiClip<V>): Promise<void> => {
     // eslint-disable-next-line no-constant-condition
     for (;;) {
       const map = loadMap();
