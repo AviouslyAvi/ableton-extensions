@@ -6,7 +6,37 @@ status: active
 
 # Handoff — Articulation Roll (FL-style articulation MIDI editor)
 
-## Where we left off
+## SESSION 2 UPDATE (2026-06-11 evening) — PREVIEW BRIDGE BUILT & PROBE PASSED
+
+1. **Text-size bump:** verified via static 1100×720 browser render, committed
+   (`f366bb9`), pushed; **PR #2 open, awaiting Avi's merge**
+   (https://github.com/AviouslyAvi/ableton-extensions/pull/2 — classifier blocked
+   self-merge). frosty worktree can be deleted after merge.
+2. **Mid-modal probe DECIDED (option B wins):** spike in
+   `03-experiments/artroll-preview-bridge/` ran live at 21:28 — **all four
+   side-channels escape the open modal** (fetch, img beacon, sendBeacon,
+   WebSocket incl. round-trip). Binary inspection: `close_and_send` is the ONLY
+   SDK webview method string in Live — protocol route closed, network route open.
+   Full M4L port NOT needed for preview.
+3. **Preview integrated into the real editor** (committed + pushed on
+   `claude/infallible-margulis-67c167`, worktree of same name): `src/preview.ts`
+   (per-modal HTTP+WS server :7475 → OSC/UDP :7474), `previewNote()` in
+   `roll.html` (place/click/re-art/pitch-drag; WS primary, fetch/img fallback;
+   toolbar "● preview" dot), `ArtRollPreview.maxpat` in the extension folder,
+   ADR `01-decisions/2026-06-11-artroll-preview-network-side-channel.md`,
+   options chart in `/Users/aviouslyavi/.claude/plans/so-how-do-we-jazzy-cascade.md`.
+4. **PENDING LIVE VERIFY:** host started from the infallible-margulis worktree
+   but stuck pre-greeting (known flaky reconnect — **toggle Developer Mode**).
+   Then: drop `ArtRollPreview.maxpat` on an instrument track, open the roll,
+   confirm green dot + audible keyswitch-then-note on click; confirm preview
+   creates NO undo entries; then PR/merge the branch.
+5. swub KS&EM (€29) assessed: different axis (automation lanes; SDK cannot
+   write envelopes — verified no envelope API in .d.ts). Worth €29 of study for
+   its PC/CC/UACC output model someday. VST plugin path re-confirmed ruled out;
+   Live's plugin MIDI routing/External Instrument noted as viable for a future
+   cross-DAW product only.
+
+## Where we left off (session 1)
 **MERGED TO MAIN.** The live walk happened: 11 of 13 checklist steps verified
 first try, Avi gave a feedback round, all fixes were implemented + live-bound
 same day, then committed (`9596873`), pushed, and merged via

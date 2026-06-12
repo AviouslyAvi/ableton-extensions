@@ -54,10 +54,14 @@ Extensions for **Ableton Live** using the **Ableton Extension SDK** (currently `
   implementing Avi's feedback round same day (marquee-default select, shift-additive,
   dual-edge relative resize, razor cursor, selection-wide selector mode, Cmd/Ctrl+1/2 grid,
   native-menu suppression). SDK verdicts: no audio API, fixed modal, no per-note MIDI channel.
-  **Pending:** live-check the text-size bump (uncommitted in the `frosty-solomon-cf8a62`
-  worktree), then commit/push it and delete the worktree. Next build: M4L port spike —
-  `04-plans/articulation-roll-m4l-port.md`; bridge assessment —
-  `04-plans/extension-m4l-bridge-and-plugin.md`.
+  **NEW (session 2): preview bridge BUILT — probe passed live** (all four localhost
+  side-channels escape the modal; WS primary). Preview integrated into the roll
+  (`src/preview.ts` + `previewNote()`; `ArtRollPreview.maxpat` helper), committed/pushed
+  on `claude/infallible-margulis-67c167`. ADR:
+  `01-decisions/2026-06-11-artroll-preview-network-side-channel.md`. M4L port NOT needed.
+  **Pending:** (1) merge PR #2 (text-size bump, classifier blocked self-merge), then
+  delete frosty worktree; (2) live-verify preview — toggle Developer Mode (host stuck
+  pre-greeting), drop the maxpat on the track, hear ks+note, then PR the branch.
   → Resume: `05-handoffs/active/handoff-2026-06-11-articulation-roll.md`
 
 - [ ] **Keyswitch** — Fast-apply + **bulk auto-placement** (per onset / per phrase, ranged
