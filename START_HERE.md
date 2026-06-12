@@ -62,10 +62,11 @@ Extensions for **Ableton Live** using the **Ableton Extension SDK** (currently `
   **Pending:** (1) merge PR #2 (text-size bump, classifier blocked self-merge), then
   delete frosty worktree; (2) live-verify preview — toggle Developer Mode (host stuck
   pre-greeting), drop the maxpat on the track, hear ks+note, then PR the branch.
-  → Resume: `05-handoffs/active/handoff-2026-06-11-articulation-roll.md`
+  → Resume: `05-handoffs/active/handoff-2026-06-11-preview-bridge.md`
+  (full record: `…/handoff-2026-06-11-articulation-roll.md`)
 
 - [ ] **Keyswitch** — Fast-apply + **bulk auto-placement** (per onset / per phrase, ranged
-  apply, KS_LEAD pre-roll) committed (`5a62517` on `keyswitch-fast-apply`, unpushed).
+  apply, KS_LEAD pre-roll) committed (`5a62517` on `keyswitch-fast-apply`, now pushed).
   New: `03-experiments/keyswitch-m4l/` — M4L v8 spike reading SELECTED notes
   (`get_selected_notes_extended`), which the SDK can't see. **Pending: live re-test of
   fast-apply items + the new bulk placement** before calling it done.
