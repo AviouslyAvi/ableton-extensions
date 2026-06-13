@@ -1,23 +1,33 @@
 /**
- * Preview bridge — lets the modal webview trigger audible notes while open.
+ * Preview + transport bridge — lets the modal webview trigger audible notes AND
+ * drive Live's real transport while the modal is open.
  *
- * The SDK's webview protocol only carries `close_and_send`, but the modal is a
- * real webview, so localhost networking escapes it (probe-verified 2026-06-11:
- * WebSocket, fetch, sendBeacon and img beacons all reach the host mid-modal —
- * see 03-experiments/artroll-preview-bridge/).
+ * The SDK's webview protocol only carries `close_and_send`, and the SDK has no
+ * transport API at all — but the modal is a real webview, so localhost
+ * networking escapes it (probe-verified 2026-06-11: WebSocket, fetch, sendBeacon
+ * and img beacons all reach the host mid-modal). The Max device on the track has
+ * full Live Object Model access, so it becomes our transport remote.
  *
- * Flow: roll.html → WS/HTTP on :7475 → this module → OSC datagram on UDP :7474
- * → ArtRollPreview.amxd (on the edited track, before the instrument) →
- * keyswitch-then-note through the real instrument. Failure mode at every hop
- * is silence, never an error the user has to dismiss.
+ * Ports:
+ *   7475  webview  -> host   (WS/HTTP; notes + play/stop commands)
+ *   7474  host     -> M4L    (OSC; /artroll/note, /artroll/play, /artroll/stop)
+ *   7476  M4L      -> host   (OSC; /artroll/pos <beatMilli> <isPlaying>)
+ *
+ * Note flow:      roll.html -> :7475 -> :7474 -> ArtRollPreview -> instrument.
+ * Transport flow: roll.html -> :7475 -> :7474 -> ArtRollPreview runs
+ *   start_playing/stop_playing on live_set; ArtRollPreview polls song time and
+ *   sends it back :7476 -> :7475 -> roll.html, which moves the editor playhead.
+ * Failure mode at every hop is silence/no-sync, never an error to dismiss.
  */
 import * as http from "node:http";
 import * as crypto from "node:crypto";
 import * as dgram from "node:dgram";
 import { URL } from "node:url";
+import type { Duplex } from "node:stream";
 
 const HTTP_PORT = 7475; // webview -> host
 const UDP_PORT = 7474; // host -> M4L
+const POS_PORT = 7476; // M4L -> host (transport position feedback)
 
 const GIF = Buffer.from("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", "base64");
 
@@ -36,6 +46,28 @@ const oscMessage = (address: string, ints: number[]): Buffer => {
   const args = Buffer.alloc(4 * ints.length);
   ints.forEach((n, i) => args.writeInt32BE(Math.round(n), i * 4));
   return Buffer.concat([addr, tags, args]);
+};
+
+/** Parse an inbound OSC message, coercing int and float args to numbers. */
+const oscParse = (buf: Buffer): { address: string; args: number[] } | null => {
+  const nul = buf.indexOf(0);
+  if (nul < 0) return null;
+  const address = buf.toString("ascii", 0, nul);
+  let p = (nul + 4) & ~3; // typetags start, padded to 4
+  if (p >= buf.length || buf[p] !== 0x2c /* ',' */) return null;
+  const tnul = buf.indexOf(0, p);
+  if (tnul < 0) return null;
+  const tags = buf.toString("ascii", p + 1, tnul);
+  p = (tnul + 4) & ~3;
+  const args: number[] = [];
+  for (const t of tags) {
+    if (p + 4 > buf.length) return null;
+    if (t === "i") args.push(buf.readInt32BE(p));
+    else if (t === "f") args.push(buf.readFloatBE(p));
+    else return null;
+    p += 4;
+  }
+  return { address, args };
 };
 
 // ---- Minimal RFC6455 (small text frames are all the roll ever sends) --------
@@ -70,19 +102,21 @@ const wsDecodeFrames = (data: Buffer): string[] => {
 export type PreviewBridge = { close: () => void };
 
 /**
- * Start the side-channel server + UDP sender for one modal session.
+ * Start the side-channel server + UDP sockets for one modal session.
  * Never throws: a port collision (stale host, second Live) just logs and
  * returns an inert bridge — the editor stays usable, silently.
  */
 export const startPreviewBridge = (): PreviewBridge => {
   const udp = dgram.createSocket("udp4");
 
-  const sendNote = (pitch: number, vel: number, durMs: number, ks: number, ksHold: number) => {
-    const msg = oscMessage("/artroll/note", [pitch, vel, durMs, ks, ksHold]);
-    udp.send(msg, UDP_PORT, "127.0.0.1", (err) => {
+  const sendOsc = (address: string, ints: number[]) => {
+    udp.send(oscMessage(address, ints), UDP_PORT, "127.0.0.1", (err) => {
       if (err) log("UDP send error:", err.message);
     });
   };
+
+  const sendNote = (pitch: number, vel: number, durMs: number, ks: number, ksHold: number) =>
+    sendOsc("/artroll/note", [pitch, vel, durMs, ks, ksHold]);
 
   const fromQuery = (url: URL) =>
     sendNote(
@@ -92,6 +126,27 @@ export const startPreviewBridge = (): PreviewBridge => {
       Number(url.searchParams.get("ks") ?? -1),
       Number(url.searchParams.get("ksHold") ?? 120),
     );
+
+  // Live WS sockets, so transport position frames can be pushed to the webview.
+  const clients = new Set<Duplex>();
+
+  const handleCommand = (text: string): boolean => {
+    let m = text.match(/^note (\d+) (\d+) (\d+) (-?\d+) (\d+)$/);
+    if (m) {
+      sendNote(+m[1]!, +m[2]!, +m[3]!, +m[4]!, +m[5]!);
+      return true;
+    }
+    m = text.match(/^play (-?\d+)$/);
+    if (m) {
+      sendOsc("/artroll/play", [+m[1]!]);
+      return true;
+    }
+    if (text === "stop") {
+      sendOsc("/artroll/stop", [1]);
+      return true;
+    }
+    return false;
+  };
 
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? "/", `http://127.0.0.1:${HTTP_PORT}`);
@@ -132,25 +187,48 @@ export const startPreviewBridge = (): PreviewBridge => {
         "Upgrade: websocket\r\nConnection: Upgrade\r\n" +
         `Sec-WebSocket-Accept: ${wsAcceptKey(key)}\r\n\r\n`,
     );
+    clients.add(socket);
     log("preview channel connected (WebSocket)");
     socket.on("data", (data: Buffer) => {
-      for (const text of wsDecodeFrames(data)) {
-        const m = text.match(/^note (\d+) (\d+) (\d+) (-?\d+) (\d+)$/);
-        if (m) sendNote(+m[1]!, +m[2]!, +m[3]!, +m[4]!, +m[5]!);
-      }
+      for (const text of wsDecodeFrames(data)) handleCommand(text);
     });
-    socket.on("error", (e) => log("WS socket error:", e.message));
+    socket.on("close", () => clients.delete(socket));
+    socket.on("error", (e) => {
+      clients.delete(socket);
+      log("WS socket error:", e.message);
+    });
   });
 
   server.on("error", (e) => log("preview disabled:", (e as Error).message));
   server.listen(HTTP_PORT, "127.0.0.1", () => log(`listening on 127.0.0.1:${HTTP_PORT}`));
+
+  // Reverse channel: M4L reports transport position; forward it to the webview.
+  const pos = dgram.createSocket("udp4");
+  pos.on("message", (msg) => {
+    const parsed = oscParse(msg);
+    if (!parsed || parsed.address !== "/artroll/pos" || parsed.args.length < 2) return;
+    const beatMilli = Math.round(parsed.args[0]!);
+    const isPlaying = parsed.args[1] ? 1 : 0;
+    const frame = wsTextFrame(`pos ${beatMilli} ${isPlaying}`);
+    for (const c of clients) {
+      if (c.writable) c.write(frame);
+    }
+  });
+  pos.on("error", (e) => log("transport feedback disabled:", e.message));
+  pos.bind(POS_PORT, "127.0.0.1", () => log(`transport feedback on 127.0.0.1:${POS_PORT}`));
 
   return {
     close: () => {
       server.close();
       // drop any live WS sockets so close() doesn't linger
       server.closeAllConnections?.();
+      clients.clear();
       udp.close();
+      try {
+        pos.close();
+      } catch {
+        /* already closed */
+      }
     },
   };
 };
