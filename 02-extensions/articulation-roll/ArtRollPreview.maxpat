@@ -18,7 +18,8 @@
                     "maxclass": "comment",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 30.0, 10.0, 560.0, 33.0 ],
+                    "patching_rect": [ 23.0, 77.0, 1010.0, 33.0 ],
+                    "presentation_linecount": 2,
                     "text": "ArtRoll Preview — receives OSC /artroll/note <pitch> <vel> <durMs> <ksPitch> <ksHoldMs> on UDP 7474 and injects preview notes. midiin->midiout passes the track's own MIDI through to the instrument (without it, the device would swallow all incoming MIDI and the track would go silent). Put this device on the edited track, BEFORE the instrument. ksPitch -1 = no keyswitch."
                 }
             },
@@ -29,7 +30,7 @@
                     "numinlets": 1,
                     "numoutlets": 1,
                     "outlettype": [ "" ],
-                    "patching_rect": [ 30.0, 45.0, 110.0, 22.0 ],
+                    "patching_rect": [ 23.0, 112.0, 110.0, 22.0 ],
                     "text": "udpreceive 7474"
                 }
             },
@@ -40,7 +41,7 @@
                     "numinlets": 2,
                     "numoutlets": 2,
                     "outlettype": [ "", "" ],
-                    "patching_rect": [ 30.0, 80.0, 120.0, 22.0 ],
+                    "patching_rect": [ 23.0, 147.0, 120.0, 22.0 ],
                     "text": "route /artroll/note"
                 }
             },
@@ -51,7 +52,7 @@
                     "numinlets": 1,
                     "numoutlets": 5,
                     "outlettype": [ "int", "int", "int", "int", "int" ],
-                    "patching_rect": [ 30.0, 115.0, 140.0, 22.0 ],
+                    "patching_rect": [ 23.0, 182.0, 140.0, 22.0 ],
                     "text": "unpack 0 0 0 0 0"
                 }
             },
@@ -62,7 +63,7 @@
                     "numinlets": 1,
                     "numoutlets": 1,
                     "outlettype": [ "" ],
-                    "patching_rect": [ 250.0, 155.0, 107.0, 22.0 ],
+                    "patching_rect": [ 243.0, 222.0, 107.0, 22.0 ],
                     "text": "if $i1 >= 0 then $i1"
                 }
             },
@@ -73,7 +74,7 @@
                     "numinlets": 3,
                     "numoutlets": 2,
                     "outlettype": [ "float", "float" ],
-                    "patching_rect": [ 250.0, 230.0, 110.0, 22.0 ],
+                    "patching_rect": [ 243.0, 297.0, 110.0, 22.0 ],
                     "text": "makenote 100 150"
                 }
             },
@@ -84,7 +85,7 @@
                     "numinlets": 2,
                     "numoutlets": 1,
                     "outlettype": [ "" ],
-                    "patching_rect": [ 30.0, 190.0, 55.0, 22.0 ],
+                    "patching_rect": [ 23.0, 257.0, 55.0, 22.0 ],
                     "text": "pipe 5"
                 }
             },
@@ -95,7 +96,7 @@
                     "numinlets": 3,
                     "numoutlets": 2,
                     "outlettype": [ "float", "float" ],
-                    "patching_rect": [ 30.0, 230.0, 110.0, 22.0 ],
+                    "patching_rect": [ 23.0, 297.0, 110.0, 22.0 ],
                     "text": "makenote 100 300"
                 }
             },
@@ -105,7 +106,7 @@
                     "maxclass": "newobj",
                     "numinlets": 3,
                     "numoutlets": 0,
-                    "patching_rect": [ 30.0, 270.0, 70.0, 22.0 ],
+                    "patching_rect": [ 23.0, 337.0, 70.0, 22.0 ],
                     "text": "noteout"
                 }
             },
@@ -115,8 +116,8 @@
                     "maxclass": "newobj",
                     "numinlets": 1,
                     "numoutlets": 1,
-                    "outlettype": [ "" ],
-                    "patching_rect": [ 430.0, 230.0, 50.0, 22.0 ],
+                    "outlettype": [ "int" ],
+                    "patching_rect": [ 423.0, 297.0, 50.0, 22.0 ],
                     "text": "midiin"
                 }
             },
@@ -126,7 +127,7 @@
                     "maxclass": "newobj",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 430.0, 270.0, 55.0, 22.0 ],
+                    "patching_rect": [ 423.0, 337.0, 55.0, 22.0 ],
                     "text": "midiout"
                 }
             }
