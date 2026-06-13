@@ -192,7 +192,11 @@
       } catch (e) { /* no bridge — editor works silently as before */ }
     }
     // Raw note out the bridge. durMs/ksHold in ms; ksPitch -1 = no keyswitch.
+    // All args MUST be integers: the host's WS parser is /^note (\d+) ...$/ and
+    // silently drops any frame with a decimal (e.g. a float playback duration).
     function pvSend(pitch, vel, durMs, ksPitch, ksHold) {
+      pitch = Math.round(pitch); vel = Math.round(vel); durMs = Math.round(durMs);
+      ksPitch = Math.round(ksPitch); ksHold = Math.round(ksHold);
       if (pvWs && pvWs.readyState === 1) {
         pvWs.send("note " + pitch + " " + vel + " " + durMs + " " + ksPitch + " " + ksHold);
         return;
