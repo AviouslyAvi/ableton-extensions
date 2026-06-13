@@ -106,6 +106,7 @@
   <div class="toolbar">
     <span class="clip-name" id="clip-name">Clip</span>
     <span class="preview-ind" id="preview-ind" title="Audible note preview. Needs the ArtRoll Preview device (Max MIDI Effect) on this track, before the instrument. Green = bridge connected.">● preview</span>
+    <button class="alx-button small" id="play-btn" title="Play the clip's notes through the preview device (Space). Live's transport can't run while this editor is open, so this is a software playhead.">▶ Play</button>
     <button class="alx-button small tool" id="tool-mouse" title="Mouse: drag empty = select (Shift adds). Click empty = marker. Double-click empty = place + extend. Drag a note edge = resize (Shift = uniform).">Mouse</button>
     <button class="alx-button small tool" id="tool-pencil" title="Pencil (FL-style): click places a note; drag moves it. Shift while dragging extends. Hold E for Cut.">Pencil</button>
     <button class="alx-button small tool" id="tool-cut" title="Cut: click/drag across notes to split (hold Cmd/Ctrl to snap). Shortcut: hold E.">Cut</button>
@@ -190,21 +191,91 @@
         sock.onerror = () => {};
       } catch (e) { /* no bridge — editor works silently as before */ }
     }
-    function previewNote(n) {
-      const a = n.art ? artMap.find(m => m.name === n.art) : null;
-      const ksPitch = a ? a.pitch : -1;
-      const ksHold = a && a.hold ? PV_DUR_MS : PV_KS_TAP_MS;
-      const vel = typeof n.velocity === "number" ? n.velocity : 100;
+    // Raw note out the bridge. durMs/ksHold in ms; ksPitch -1 = no keyswitch.
+    function pvSend(pitch, vel, durMs, ksPitch, ksHold) {
       if (pvWs && pvWs.readyState === 1) {
-        pvWs.send("note " + n.pitch + " " + vel + " " + PV_DUR_MS + " " + ksPitch + " " + ksHold);
+        pvWs.send("note " + pitch + " " + vel + " " + durMs + " " + ksPitch + " " + ksHold);
         return;
       }
-      const q = "/note?pitch=" + n.pitch + "&vel=" + vel + "&dur=" + PV_DUR_MS
+      const q = "/note?pitch=" + pitch + "&vel=" + vel + "&dur=" + durMs
         + "&ks=" + ksPitch + "&ksHold=" + ksHold;
       fetch("http://127.0.0.1:" + PV_PORT + q)
         .catch(() => { new Image().src = "http://127.0.0.1:" + PV_PORT + q + "&ch=img"; });
     }
+    // Keyswitch params for a note's articulation, given the note length in ms.
+    function pvKsFor(n, durMs) {
+      const a = n.art ? artMap.find(m => m.name === n.art) : null;
+      return { ksPitch: a ? a.pitch : -1, ksHold: a && a.hold ? durMs : PV_KS_TAP_MS };
+    }
+    function previewNote(n) {
+      const { ksPitch, ksHold } = pvKsFor(n, PV_DUR_MS);
+      const vel = typeof n.velocity === "number" ? n.velocity : 100;
+      pvSend(n.pitch, vel, PV_DUR_MS, ksPitch, ksHold);
+    }
     pvConnect();
+
+    // ---- In-editor transport (software playhead through the bridge) ----------
+    // Live's own transport can't be driven from the modal (no SDK transport API,
+    // and the modal blocks Live's UI). Instead we schedule the clip's notes out
+    // the preview bridge in real time and animate a playhead. Tempo comes from
+    // the host (DATA.tempo); 120 BPM if absent.
+    const TEMPO = (typeof DATA.tempo === "number" && DATA.tempo > 0) ? DATA.tempo : 120;
+    const SEC_PER_BEAT = 60 / TEMPO;
+    let playing = false;
+    let playTimers = [];
+    let playStartMs = 0;     // performance.now() when transport started
+    let playStartBeat = 0;   // beat the playhead started from
+    let playRAF = 0;
+
+    function playheadBeat() {
+      if (!playing) return null;
+      return playStartBeat + (performance.now() - playStartMs) / 1000 / SEC_PER_BEAT;
+    }
+    function updatePlayBtn() {
+      const b = document.getElementById("play-btn");
+      if (!b) return;
+      b.textContent = playing ? "■ Stop" : "▶ Play";
+      b.classList.toggle("primary", playing);
+    }
+    function stopPlayback() {
+      if (!playing && !playTimers.length) return;
+      playing = false;
+      playTimers.forEach(clearTimeout);
+      playTimers = [];
+      if (playRAF) { cancelAnimationFrame(playRAF); playRAF = 0; }
+      updatePlayBtn();
+      requestDraw();
+    }
+    function playLoop() {
+      requestDraw();
+      if (playing) playRAF = requestAnimationFrame(playLoop);
+    }
+    function startPlayback(fromBeat) {
+      stopPlayback();
+      fromBeat = Math.max(0, fromBeat || 0);
+      if (fromBeat >= clipDuration) fromBeat = 0;
+      playing = true;
+      playStartBeat = fromBeat;
+      playStartMs = performance.now();
+      const upcoming = notes
+        .filter(n => n.startTime >= fromBeat - 1e-6)
+        .sort((a, b) => a.startTime - b.startTime);
+      for (const n of upcoming) {
+        const delayMs = (n.startTime - fromBeat) * SEC_PER_BEAT * 1000;
+        const durMs = Math.max(20, n.duration * SEC_PER_BEAT * 1000);
+        const vel = typeof n.velocity === "number" ? n.velocity : 100;
+        const { ksPitch, ksHold } = pvKsFor(n, durMs);
+        playTimers.push(setTimeout(() => pvSend(n.pitch, vel, durMs, ksPitch, ksHold), delayMs));
+      }
+      // stop a hair after the clip end
+      playTimers.push(setTimeout(stopPlayback, (clipDuration - fromBeat) * SEC_PER_BEAT * 1000 + 60));
+      updatePlayBtn();
+      playLoop();
+    }
+    function togglePlayback() {
+      if (playing) stopPlayback();
+      else startPlayback(marker != null ? snapBeat(marker) : 0);
+    }
 
     // ---- Pitch <-> name (Live convention: C-2 = MIDI 0, C3 = 60) ----
     const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -353,6 +424,7 @@
       ctx.clearRect(0, 0, viewW, viewH);
       drawGrid();
       drawNotes();
+      drawPlayhead();
       drawOverlays();
       drawKeyboard();
       drawRuler();
@@ -360,6 +432,18 @@
       // top-left corner cap
       ctx.fillStyle = "var(--c-bg--0500)";
       fillRect(0, 0, GUTTER, RULER, cssVar("--c-bg--0500"));
+    }
+
+    function drawPlayhead() {
+      const pb = playheadBeat();
+      if (pb == null) return;
+      const x = beatToX(pb);
+      if (x < GUTTER || x > viewW) return;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(GUTTER, RULER, gridW(), gridH()); ctx.clip();
+      ctx.strokeStyle = "#7c5"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x, RULER); ctx.lineTo(x, RULER + gridH()); ctx.stroke();
+      ctx.restore();
     }
 
     function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
@@ -983,6 +1067,13 @@
       const cmd = e.metaKey || e.ctrlKey;
       const k = e.key.toLowerCase();
 
+      if (e.key === " " && !cmd) {
+        // a focused button activates natively on Space — don't toggle twice
+        if (t && t.tagName === "BUTTON") return;
+        e.preventDefault();
+        togglePlayback();
+        return;
+      }
       if (cmd && k === "z") {
         e.preventDefault();
         if (e.shiftKey) doRedo(); else doUndo();
@@ -1028,6 +1119,7 @@
       }
       if (e.key === "Escape") {
         if (ctxMenu.style.display === "block") { hideCtxMenu(); return; }
+        if (playing) { stopPlayback(); return; }
         closeWith({ type: "cancel" });
         return;
       }
@@ -1150,8 +1242,11 @@
       selectorToggle.textContent = "Art. select: " + (selectorMode ? "on" : "off");
     };
 
-    document.getElementById("cancel-btn").onclick = () => closeWith({ type: "cancel" });
+    document.getElementById("play-btn").onclick = togglePlayback;
+
+    document.getElementById("cancel-btn").onclick = () => { stopPlayback(); closeWith({ type: "cancel" }); };
     document.getElementById("apply-btn").onclick = () => {
+      stopPlayback();
       closeWith({
         type: "apply",
         notes: notes.map(n => {

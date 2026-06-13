@@ -214,8 +214,21 @@ export function activate(activation: ActivationContext) {
     schema: string;
     clip: { name: string; startTime: number; duration: number };
     grid: { snap: number; default: number };
+    tempo: number;
     notes: RollNote[];
     articulations: Articulation[];
+  };
+
+  // Song tempo, so the roll's in-editor playback runs at the right speed.
+  // Live's transport can't be driven from the modal, so the roll sequences the
+  // clip's own notes out the preview bridge — it needs beats->seconds.
+  const songTempo = (): number => {
+    try {
+      const t = context.application.song.tempo;
+      return typeof t === "number" && t > 0 ? t : 120;
+    } catch {
+      return 120;
+    }
   };
 
   const buildPayload = (clip: MidiClip<V>, melodicOriginals: NoteDescription[]): RollPayload => {
@@ -225,6 +238,7 @@ export function activate(activation: ActivationContext) {
       schema: "1.1.0",
       clip: { name: clip.name, startTime: clip.startTime, duration: clip.duration },
       grid: { snap: DEFAULT_GRID, default: DEFAULT_GRID },
+      tempo: songTempo(),
       // id = index into melodicOriginals, used to preserve untouched fields on
       // apply; art = derived from the clip's existing keyswitch notes.
       notes: melodicOriginals.map((n, i) => ({ ...n, id: i, art: arts[i] ?? null })),
