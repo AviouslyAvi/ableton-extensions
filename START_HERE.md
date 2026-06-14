@@ -59,11 +59,25 @@ Extensions for **Ableton Live** using the **Ableton Extension SDK** (currently `
   (`src/preview.ts` + `previewNote()`; `ArtRollPreview.maxpat` helper), committed/pushed
   on `claude/infallible-margulis-67c167`. ADR:
   `01-decisions/2026-06-11-artroll-preview-network-side-channel.md`. M4L port NOT needed.
-  **Pending:** (1) merge PR #2 (text-size bump, classifier blocked self-merge), then
-  delete frosty worktree; (2) live-verify preview — toggle Developer Mode (host stuck
-  pre-greeting), drop the maxpat on the track, hear ks+note, then PR the branch.
-  → Resume: `05-handoffs/active/handoff-2026-06-11-preview-bridge.md`
-  (full record: `…/handoff-2026-06-11-articulation-roll.md`)
+  **NEW (session 3, 2026-06-12): preview VERIFIED LIVE** — ks+note audible on click.
+  PR #2 merged + frosty worktree deleted. The pre-greeting stall was an orphaned
+  `Helpers/ExtensionHost/node` (for similar-samples, ppid 1) squatting the dev-host slot
+  — fix in `00-foundation/README.md`.
+  **NEW (session 4, 2026-06-13):** silent-track bug FIXED + VERIFIED LIVE
+  (`ArtRollPreview.maxpat` was missing `midiin->midiout` passthrough — it swallowed all
+  track MIDI; same root cause as old "no playback"). Built **in-editor Play** (software
+  playhead via the bridge; SDK has no transport API). Found + fixed the silent in-editor
+  playback bug (`pvSend` sent float durMs → host WS regex is int-only → frames dropped;
+  now rounds args). In-editor Play VERIFIED LIVE; **PR #3** opened.
+  **NEW (session 5, 2026-06-13): TRANSPORT SYNC SHIPPED + VERIFIED LIVE** — Play
+  now drives Live's real transport via the M4L bridge (hear the whole arrangement,
+  in sync; playhead follows Live). Reverse UDP :7476 + maxpat transport objects.
+  **PR #4** (`claude/artroll-transport-sync`, HEAD `bd17940`). ADR:
+  `01-decisions/2026-06-13-artroll-transport-via-m4l-bridge.md`. **Next: 8-item
+  feature backlog** in `04-plans/artroll-feature-backlog.md` (start with KS
+  pre-roll nudge).
+  → Resume: `05-handoffs/active/handoff-2026-06-13-artroll-feature-backlog.md`
+  (prior: `…/handoff-2026-06-13-playback-fix.md`; full record: `…/handoff-2026-06-11-articulation-roll.md`)
 
 - [ ] **Keyswitch** — Fast-apply + **bulk auto-placement** (per onset / per phrase, ranged
   apply, KS_LEAD pre-roll) committed (`5a62517` on `keyswitch-fast-apply`, now pushed).
