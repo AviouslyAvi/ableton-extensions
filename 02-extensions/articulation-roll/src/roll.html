@@ -126,9 +126,9 @@
     <span class="clip-name" id="clip-name">Clip</span>
     <span class="preview-ind" id="preview-ind" title="Audible note preview. Needs the ArtRoll Preview device (Max MIDI Effect) on this track, before the instrument. Green = bridge connected.">● preview</span>
     <button class="alx-button small" id="play-btn" title="Play (Space). With the ArtRoll Preview device on this track, this starts Live's real transport at the clip's position — you hear the whole arrangement, in sync. Without it, falls back to a software playhead that previews this clip only.">▶ Play</button>
-    <button class="alx-button small tool" id="tool-mouse" title="Mouse: drag empty = select (Shift adds). Click empty = marker. Double-click empty = place + extend. Drag a note edge = resize (Shift = uniform).">Mouse</button>
-    <button class="alx-button small tool" id="tool-pencil" title="Pencil (FL-style): click places a note; drag moves it. Shift while dragging extends. Hold E for Cut.">Pencil</button>
-    <button class="alx-button small tool" id="tool-cut" title="Cut: click/drag across notes to split (hold Cmd/Ctrl to snap). Shortcut: hold E.">Cut</button>
+    <button class="alx-button small tool" id="tool-mouse" title="Mouse: drag empty = select (Shift adds). Click empty = marker. Double-click empty = place + extend. Drag a note body = move (Option/Alt = off-grid). Drag a note edge = resize (Shift = uniform).">Mouse</button>
+    <button class="alx-button small tool" id="tool-pencil" title="Pencil (FL-style): click places a note; drag moves it (Option/Alt = off-grid). Shift while dragging extends. Hold E for Cut.">Pencil</button>
+    <button class="alx-button small tool" id="tool-cut" title="Cut: click/drag across notes to split (snaps to grid; hold Option/Alt for freehand). Shortcut: hold E.">Cut</button>
     <span class="spacer"></span>
     <label>Articulation</label>
     <select class="alx-input" id="art-select"></select>
@@ -1309,8 +1309,8 @@
     function cutAt(e, x, y) {
       const hit = noteAt(x, y);
       if (!hit || drag.cutKeys.has(hit.note._key)) return;
-      // unsnapped by default; Cmd/Ctrl snaps the cut to the grid
-      const beat = (e.metaKey || e.ctrlKey) ? snapBeat(xToBeat(x)) : xToBeat(x);
+      // snapped to the grid by default; hold Option/Alt for freehand slicing
+      const beat = e.altKey ? xToBeat(x) : snapBeat(xToBeat(x));
       splitNote(hit.note, beat, drag);
     }
 
@@ -1360,8 +1360,8 @@
           n.duration = Math.min(end, clipDuration) - n.startTime;
         } else {
           // FL-style: the placed note follows the cursor, snapped — no resize,
-          // no velocity change on vertical movement
-          let nb = snapBeat(xToBeat(x));
+          // no velocity change on vertical movement. Option/Alt = off-grid follow.
+          let nb = e.altKey ? xToBeat(x) : snapBeat(xToBeat(x));
           nb = Math.max(0, Math.min(nb, clipDuration - n.duration));
           n.startTime = nb;
           n.pitch = Math.max(0, Math.min(127, yToPitch(y)));
@@ -1376,7 +1376,9 @@
         // group stays inside the clip and pitch range
         const a = drag.anchor;
         const ao = drag.origins.get(a._key);
-        let nb = snapBeat(xToBeat(x) - drag.grabBeat);
+        // snapped to the grid by default; hold Option/Alt for off-grid (freehand) move
+        const rawB = xToBeat(x) - drag.grabBeat;
+        let nb = e.altKey ? rawB : snapBeat(rawB);
         nb = Math.max(0, Math.min(nb, clipDuration - a.duration));
         let dB = nb - ao.startTime;
         let dP = Math.max(0, Math.min(127, yToPitch(y) - drag.grabPitch)) - ao.pitch;
