@@ -97,12 +97,16 @@
     .buttons { display: flex; gap: 0.5em; margin-top: 0.75em; max-width: 520px; }
     .buttons .spacer { flex: 1; }
     .hint { color: var(--c-text-secondary); }
+    .preview-ind { font-size: 11px; color: var(--c-text-secondary); user-select: none; white-space: nowrap; }
+    .preview-ind.on { color: #7c5; }
   </style>
 </head>
 
 <body>
   <div class="toolbar">
     <span class="clip-name" id="clip-name">Clip</span>
+    <span class="preview-ind" id="preview-ind" title="Audible note preview. Needs the ArtRoll Preview device (Max MIDI Effect) on this track, before the instrument. Green = bridge connected.">● preview</span>
+    <button class="alx-button small" id="play-btn" title="Play (Space). With the ArtRoll Preview device on this track, this starts Live's real transport at the clip's position — you hear the whole arrangement, in sync. Without it, falls back to a software playhead that previews this clip only.">▶ Play</button>
     <button class="alx-button small tool" id="tool-mouse" title="Mouse: drag empty = select (Shift adds). Click empty = marker. Double-click empty = place + extend. Drag a note edge = resize (Shift = uniform).">Mouse</button>
     <button class="alx-button small tool" id="tool-pencil" title="Pencil (FL-style): click places a note; drag moves it. Shift while dragging extends. Hold E for Cut.">Pencil</button>
     <button class="alx-button small tool" id="tool-cut" title="Cut: click/drag across notes to split (hold Cmd/Ctrl to snap). Shortcut: hold E.">Cut</button>
@@ -164,6 +168,176 @@
     }
     function closeWith(result) {
       doSendMessage({ method: "close_and_send", params: [JSON.stringify(result)] });
+    }
+
+    // ---- Preview bridge (host side-channel; probe-verified 2026-06-11) ----
+    // The SDK protocol only knows close_and_send, but the modal is a real
+    // webview: WebSocket/fetch/img to the host's localhost server all escape
+    // it mid-modal. WS preferred (gives us connected-state); fetch then img
+    // beacon as fallbacks. Failure mode is silence, never an error dialog.
+    const PV_PORT = 7475;
+    const PV_DUR_MS = 250;       // fixed preview length (tempo isn't in DATA)
+    const PV_KS_TAP_MS = 120;    // non-held keyswitch tap
+    let pvWs = null;
+    function pvSetStatus(on) {
+      const el = document.getElementById("preview-ind");
+      if (el) el.className = "preview-ind" + (on ? " on" : "");
+    }
+    function pvConnect() {
+      try {
+        const sock = new WebSocket("ws://127.0.0.1:" + PV_PORT);
+        sock.onopen = () => { pvWs = sock; pvSetStatus(true); };
+        sock.onclose = () => { if (pvWs === sock) { pvWs = null; pvSetStatus(false); } };
+        sock.onerror = () => {};
+        sock.onmessage = (ev) => onPosFrame(String(ev.data));
+      } catch (e) { /* no bridge — editor works silently as before */ }
+    }
+    // Text command out the bridge (play/stop). Returns true if it went over WS.
+    function pvCmd(text) {
+      if (pvWs && pvWs.readyState === 1) { pvWs.send(text); return true; }
+      return false;
+    }
+    // Raw note out the bridge. durMs/ksHold in ms; ksPitch -1 = no keyswitch.
+    // All args MUST be integers: the host's WS parser is /^note (\d+) ...$/ and
+    // silently drops any frame with a decimal (e.g. a float playback duration).
+    function pvSend(pitch, vel, durMs, ksPitch, ksHold) {
+      pitch = Math.round(pitch); vel = Math.round(vel); durMs = Math.round(durMs);
+      ksPitch = Math.round(ksPitch); ksHold = Math.round(ksHold);
+      if (pvWs && pvWs.readyState === 1) {
+        pvWs.send("note " + pitch + " " + vel + " " + durMs + " " + ksPitch + " " + ksHold);
+        return;
+      }
+      const q = "/note?pitch=" + pitch + "&vel=" + vel + "&dur=" + durMs
+        + "&ks=" + ksPitch + "&ksHold=" + ksHold;
+      fetch("http://127.0.0.1:" + PV_PORT + q)
+        .catch(() => { new Image().src = "http://127.0.0.1:" + PV_PORT + q + "&ch=img"; });
+    }
+    // Keyswitch params for a note's articulation, given the note length in ms.
+    function pvKsFor(n, durMs) {
+      const a = n.art ? artMap.find(m => m.name === n.art) : null;
+      return { ksPitch: a ? a.pitch : -1, ksHold: a && a.hold ? durMs : PV_KS_TAP_MS };
+    }
+    function previewNote(n) {
+      const { ksPitch, ksHold } = pvKsFor(n, PV_DUR_MS);
+      const vel = typeof n.velocity === "number" ? n.velocity : 100;
+      pvSend(n.pitch, vel, PV_DUR_MS, ksPitch, ksHold);
+    }
+    pvConnect();
+
+    // ---- In-editor transport -------------------------------------------------
+    // The SDK has no transport API and the modal blocks Live's UI, so we can't
+    // drive Live directly. Two paths, picked at Play time:
+    //
+    //  • SYNCED (preferred): if the ArtRoll Preview device is reporting transport
+    //    position back over the bridge (pos frames on :7476 -> :7475), Play tells
+    //    Live to start its REAL transport at this clip's arrangement position.
+    //    You then hear the whole arrangement, in sync, and the editor playhead
+    //    follows Live's actual song time. No bridge preview notes are scheduled
+    //    (Live is playing the real track).
+    //
+    //  • SOFTWARE (fallback): no device / no feedback -> schedule the clip's own
+    //    notes out the preview bridge in real time and animate a local playhead.
+    //
+    // Tempo comes from the host (DATA.tempo); 120 BPM if absent.
+    const TEMPO = (typeof DATA.tempo === "number" && DATA.tempo > 0) ? DATA.tempo : 120;
+    const SEC_PER_BEAT = 60 / TEMPO;
+    // Clip's arrangement start (beats). Live reports global song time; subtract
+    // this to place the playhead in clip-local coordinates.
+    const CLIP_START = (DATA.clip && typeof DATA.clip.startTime === "number") ? DATA.clip.startTime : 0;
+    let playing = false;
+    let syncMode = false;    // true => playhead driven by Live's reported time
+    let playTimers = [];
+    let playStartMs = 0;     // performance.now() when transport started
+    let playStartBeat = 0;   // clip-local beat the playhead started from
+    let playRAF = 0;
+    // Transport feedback from the device (synced path).
+    let lastPosMs = -1e9;    // performance.now() of last pos frame
+    let syncBeat = null;     // clip-local beat last reported by Live
+    let syncLivePlaying = false;
+
+    // Sync is "available" only if the device sent a position frame very recently.
+    function syncAvail() { return (performance.now() - lastPosMs) < 800; }
+
+    function onPosFrame(text) {
+      const m = text.match(/^pos (-?\d+) (\d+)$/);
+      if (!m) return;
+      lastPosMs = performance.now();
+      syncBeat = (+m[1]) / 1000 - CLIP_START;
+      syncLivePlaying = m[2] === "1";
+      if (syncMode && playing) {
+        // Live stopped on its own (reached end / external stop) -> reflect it.
+        if (!syncLivePlaying && performance.now() - playStartMs > 500) { stopPlayback(); return; }
+        requestDraw();
+      }
+    }
+
+    function playheadBeat() {
+      if (!playing) return null;
+      if (syncMode) return syncBeat != null ? syncBeat : playStartBeat;
+      return playStartBeat + (performance.now() - playStartMs) / 1000 / SEC_PER_BEAT;
+    }
+    function updatePlayBtn() {
+      const b = document.getElementById("play-btn");
+      if (!b) return;
+      b.textContent = playing ? "■ Stop" : "▶ Play";
+      b.classList.toggle("primary", playing);
+    }
+    function stopPlayback() {
+      if (!playing && !playTimers.length) return;
+      const wasSync = syncMode;
+      playing = false;
+      syncMode = false;
+      playTimers.forEach(clearTimeout);
+      playTimers = [];
+      if (playRAF) { cancelAnimationFrame(playRAF); playRAF = 0; }
+      if (wasSync) pvCmd("stop");
+      updatePlayBtn();
+      requestDraw();
+    }
+    function playLoop() {
+      requestDraw();
+      if (playing) playRAF = requestAnimationFrame(playLoop);
+    }
+    function startPlayback(fromBeat) {
+      stopPlayback();
+      fromBeat = Math.max(0, fromBeat || 0);
+      if (fromBeat >= clipDuration) fromBeat = 0;
+      playing = true;
+      playStartBeat = fromBeat;
+      playStartMs = performance.now();
+
+      if (syncAvail()) {
+        // Synced: start Live's real transport at this clip's position. Live plays
+        // the actual notes (and the rest of the arrangement) — don't double them
+        // out the bridge.
+        syncMode = true;
+        syncBeat = fromBeat;
+        pvCmd("play " + Math.round((CLIP_START + fromBeat) * 1000));
+        updatePlayBtn();
+        playLoop();
+        return;
+      }
+
+      // Software fallback: sequence the clip's own notes out the bridge.
+      syncMode = false;
+      const upcoming = notes
+        .filter(n => n.startTime >= fromBeat - 1e-6)
+        .sort((a, b) => a.startTime - b.startTime);
+      for (const n of upcoming) {
+        const delayMs = (n.startTime - fromBeat) * SEC_PER_BEAT * 1000;
+        const durMs = Math.max(20, n.duration * SEC_PER_BEAT * 1000);
+        const vel = typeof n.velocity === "number" ? n.velocity : 100;
+        const { ksPitch, ksHold } = pvKsFor(n, durMs);
+        playTimers.push(setTimeout(() => pvSend(n.pitch, vel, durMs, ksPitch, ksHold), delayMs));
+      }
+      // stop a hair after the clip end
+      playTimers.push(setTimeout(stopPlayback, (clipDuration - fromBeat) * SEC_PER_BEAT * 1000 + 60));
+      updatePlayBtn();
+      playLoop();
+    }
+    function togglePlayback() {
+      if (playing) stopPlayback();
+      else startPlayback(marker != null ? snapBeat(marker) : 0);
     }
 
     // ---- Pitch <-> name (Live convention: C-2 = MIDI 0, C3 = 60) ----
@@ -313,6 +487,7 @@
       ctx.clearRect(0, 0, viewW, viewH);
       drawGrid();
       drawNotes();
+      drawPlayhead();
       drawOverlays();
       drawKeyboard();
       drawRuler();
@@ -320,6 +495,18 @@
       // top-left corner cap
       ctx.fillStyle = "var(--c-bg--0500)";
       fillRect(0, 0, GUTTER, RULER, cssVar("--c-bg--0500"));
+    }
+
+    function drawPlayhead() {
+      const pb = playheadBeat();
+      if (pb == null) return;
+      const x = beatToX(pb);
+      if (x < GUTTER || x > viewW) return;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(GUTTER, RULER, gridW(), gridH()); ctx.clip();
+      ctx.strokeStyle = "#7c5"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x, RULER); ctx.lineTo(x, RULER + gridH()); ctx.stroke();
+      ctx.restore();
     }
 
     function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
@@ -535,6 +722,7 @@
       if (n.startTime + n.duration > clipDuration) n.startTime = Math.max(0, clipDuration - n.duration);
       notes.push(n);
       selection = new Set([n._key]);
+      previewNote(n);
       return n;
     }
 
@@ -560,10 +748,12 @@
       const set = new Set(keys);
       const pre = snapState();
       let any = false;
+      let first = null;
       for (const n of notes) {
-        if (set.has(n._key) && n.art !== art) { n.art = art; any = true; }
+        if (set.has(n._key) && n.art !== art) { n.art = art; any = true; if (!first) first = n; }
       }
-      if (any) { pushUndoState(pre); requestDraw(); }
+      // hear the converted articulation immediately (first note stands in)
+      if (any) { pushUndoState(pre); previewNote(first); requestDraw(); }
     }
 
     // ---- Interaction ----
@@ -644,6 +834,7 @@
           return;
         }
         lastLength = n.duration;   // adopt length (FL behavior)
+        if (hit.zone === "body") previewNote(n);
         if (!selection.has(n._key)) selection = new Set([n._key]);
         if (hit.zone === "resize-r" || hit.zone === "resize-l") {
           drag = startResizeDrag(n, hit.zone === "resize-l" ? "l" : "r");
@@ -697,6 +888,7 @@
       if (hit) {
         const n = hit.note;
         lastLength = n.duration;
+        if (hit.zone === "body") previewNote(n);
         selection = new Set([n._key]);
         if (hit.zone === "resize-r" || hit.zone === "resize-l") {
           drag = startResizeDrag(n, hit.zone === "resize-l" ? "l" : "r");
@@ -778,6 +970,8 @@
           nb = Math.max(0, Math.min(nb, clipDuration - n.duration));
           n.startTime = nb;
           n.pitch = Math.max(0, Math.min(127, yToPitch(y)));
+          if (drag.pvPitch === undefined) drag.pvPitch = n.pitch;
+          if (n.pitch !== drag.pvPitch) { drag.pvPitch = n.pitch; previewNote(n); }
         }
         requestDraw();
         return;
@@ -806,6 +1000,9 @@
           n.pitch = o.pitch + dP;
         }
         if (dB !== 0 || dP !== 0) drag.changed = true;
+        // audible pitch feedback while dragging (anchor note stands in)
+        if (drag.pvPitch === undefined) drag.pvPitch = ao.pitch;
+        if (a.pitch !== drag.pvPitch) { drag.pvPitch = a.pitch; previewNote(a); }
         requestDraw();
         return;
       }
@@ -934,6 +1131,13 @@
       const cmd = e.metaKey || e.ctrlKey;
       const k = e.key.toLowerCase();
 
+      if (e.key === " " && !cmd) {
+        // a focused button activates natively on Space — don't toggle twice
+        if (t && t.tagName === "BUTTON") return;
+        e.preventDefault();
+        togglePlayback();
+        return;
+      }
       if (cmd && k === "z") {
         e.preventDefault();
         if (e.shiftKey) doRedo(); else doUndo();
@@ -979,6 +1183,7 @@
       }
       if (e.key === "Escape") {
         if (ctxMenu.style.display === "block") { hideCtxMenu(); return; }
+        if (playing) { stopPlayback(); return; }
         closeWith({ type: "cancel" });
         return;
       }
@@ -1101,8 +1306,11 @@
       selectorToggle.textContent = "Art. select: " + (selectorMode ? "on" : "off");
     };
 
-    document.getElementById("cancel-btn").onclick = () => closeWith({ type: "cancel" });
+    document.getElementById("play-btn").onclick = togglePlayback;
+
+    document.getElementById("cancel-btn").onclick = () => { stopPlayback(); closeWith({ type: "cancel" }); };
     document.getElementById("apply-btn").onclick = () => {
+      stopPlayback();
       closeWith({
         type: "apply",
         notes: notes.map(n => {

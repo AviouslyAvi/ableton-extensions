@@ -6,6 +6,8 @@ import {
   type NoteDescription,
 } from "@ableton-extensions/sdk";
 import * as fs from "node:fs";
+
+import { startPreviewBridge } from "./preview.js";
 import * as path from "node:path";
 
 // esbuild inlines this as a string (see build.ts `.html` text loader).
@@ -212,8 +214,21 @@ export function activate(activation: ActivationContext) {
     schema: string;
     clip: { name: string; startTime: number; duration: number };
     grid: { snap: number; default: number };
+    tempo: number;
     notes: RollNote[];
     articulations: Articulation[];
+  };
+
+  // Song tempo, so the roll's in-editor playback runs at the right speed.
+  // Live's transport can't be driven from the modal, so the roll sequences the
+  // clip's own notes out the preview bridge — it needs beats->seconds.
+  const songTempo = (): number => {
+    try {
+      const t = context.application.song.tempo;
+      return typeof t === "number" && t > 0 ? t : 120;
+    } catch {
+      return 120;
+    }
   };
 
   const buildPayload = (clip: MidiClip<V>, melodicOriginals: NoteDescription[]): RollPayload => {
@@ -223,6 +238,7 @@ export function activate(activation: ActivationContext) {
       schema: "1.1.0",
       clip: { name: clip.name, startTime: clip.startTime, duration: clip.duration },
       grid: { snap: DEFAULT_GRID, default: DEFAULT_GRID },
+      tempo: songTempo(),
       // id = index into melodicOriginals, used to preserve untouched fields on
       // apply; art = derived from the clip's existing keyswitch notes.
       notes: melodicOriginals.map((n, i) => ({ ...n, id: i, art: arts[i] ?? null })),
@@ -239,6 +255,17 @@ export function activate(activation: ActivationContext) {
 
   /** Open the roll for a clip; loops so a map edit re-opens with fresh data. */
   const openRoll = async (clip: MidiClip<V>): Promise<void> => {
+    // Audible preview for the modal session (webview -> :7475 -> UDP :7474 ->
+    // ArtRollPreview.amxd). Inert if the device/ports are absent.
+    const preview = startPreviewBridge();
+    try {
+      await openRollLoop(clip);
+    } finally {
+      preview.close();
+    }
+  };
+
+  const openRollLoop = async (clip: MidiClip<V>): Promise<void> => {
     // eslint-disable-next-line no-constant-condition
     for (;;) {
       const map = loadMap();

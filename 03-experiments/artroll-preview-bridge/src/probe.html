@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font: 13px -apple-system, sans-serif; background: #1a1a1a; color: #ddd;
+         margin: 0; padding: 14px; display: flex; flex-direction: column; height: 100vh; box-sizing: border-box; }
+  h1 { font-size: 15px; margin: 0 0 8px; }
+  .row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  button { font-size: 13px; padding: 5px 14px; border-radius: 1em; border: 1px solid #555;
+           background: #333; color: #ddd; cursor: pointer; }
+  button:hover { background: #444; }
+  button.primary { background: #e8a33d; color: #111; border-color: #e8a33d; }
+  pre { flex: 1; overflow: auto; background: #111; border: 1px solid #333; border-radius: 4px;
+        padding: 8px; margin: 0; font-size: 11.5px; line-height: 1.5; white-space: pre-wrap; }
+  .ok { color: #7c5; } .bad { color: #e66; } .info { color: #8bd; }
+</style>
+</head>
+<body>
+  <h1>Preview Bridge Probe — webview → host mid-modal channels</h1>
+  <div class="row">
+    <button id="b-note" class="primary">Play test note (C3, ks D-2)</button>
+    <button id="b-pm">Re-send unknown postMessage</button>
+    <button id="b-rerun">Re-run probes</button>
+    <button id="b-close">Close &amp; send log</button>
+  </div>
+  <pre id="log"></pre>
+
+<script>
+  const PORT = 7475;
+  const BASE = "http://127.0.0.1:" + PORT;
+  const lines = [];
+  const logEl = document.getElementById("log");
+  function log(msg, cls) {
+    const t = (performance.now() / 1000).toFixed(2) + "s ";
+    lines.push(t + msg);
+    const span = document.createElement("span");
+    span.className = cls || "";
+    span.textContent = t + msg + "\n";
+    logEl.appendChild(span);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  const isWebKit = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.live;
+  const isWebView2 = window.chrome && window.chrome.webview;
+  function doSendMessage(message) {
+    if (isWebKit) window.webkit.messageHandlers.live.postMessage(message);
+    else if (isWebView2) window.chrome.webview.postMessage(message);
+  }
+
+  // ---- Probe 1: unknown postMessage method (does it no-op? crash? close?) ----
+  function probePostMessage() {
+    try {
+      doSendMessage({ method: "bridge_probe", params: ["ping-from-modal"] });
+      log("postMessage(bridge_probe) sent — if this dialog is still open, the method was silently ignored (no mid-modal protocol channel, but no crash either)", "info");
+    } catch (e) {
+      log("postMessage(bridge_probe) threw: " + e.message, "bad");
+    }
+  }
+
+  // ---- Probe 2: fetch ----
+  function probeFetch() {
+    fetch(BASE + "/probe?ch=fetch")
+      .then(r => r.json())
+      .then(j => log("fetch -> host OK: " + JSON.stringify(j), "ok"))
+      .catch(e => log("fetch FAILED: " + e.message, "bad"));
+  }
+
+  // ---- Probe 3: image beacon (no CORS involved at all) ----
+  function probeImg() {
+    const img = new Image();
+    img.onload = () => log("img beacon -> host OK (gif loaded)", "ok");
+    img.onerror = () => log("img beacon FAILED (request blocked or no decode)", "bad");
+    img.src = BASE + "/probe?ch=img&t=" + Date.now();
+  }
+
+  // ---- Probe 4: sendBeacon ----
+  function probeBeacon() {
+    if (!navigator.sendBeacon) { log("sendBeacon unavailable", "info"); return; }
+    const queued = navigator.sendBeacon(BASE + "/probe?ch=beacon", "hi");
+    log("sendBeacon queued=" + queued + " (check host log for the hit)", queued ? "ok" : "bad");
+  }
+
+  // ---- Probe 5: WebSocket ----
+  let ws = null;
+  function probeWs() {
+    try {
+      const sock = new WebSocket("ws://127.0.0.1:" + PORT);
+      sock.onopen = () => { ws = sock; log("WebSocket OPEN — bidirectional channel works", "ok"); sock.send("hello-from-modal"); };
+      sock.onmessage = (ev) => log("WS recv: " + ev.data, "ok");
+      sock.onerror = () => log("WebSocket errored", "bad");
+      sock.onclose = (ev) => { if (ws !== sock) log("WebSocket closed before opening (code " + ev.code + ")", "bad"); };
+    } catch (e) {
+      log("WebSocket constructor threw: " + e.message, "bad");
+    }
+  }
+
+  function runAll() {
+    log("origin=" + location.origin + " | webkit=" + !!isWebKit + " webview2=" + !!isWebView2, "info");
+    probePostMessage();
+    probeFetch();
+    probeImg();
+    probeBeacon();
+    probeWs();
+  }
+
+  // ---- Test note: prefer WS, then fetch, then img beacon ----
+  function playNote() {
+    const q = "pitch=60&vel=100&dur=300&ks=2&ksHold=150"; // C3 + ks D-2 (Live: C-2 = 0)
+    if (ws && ws.readyState === 1) { ws.send("note 60 100 300 2 150"); log("note via WS", "ok"); return; }
+    fetch(BASE + "/note?" + q).then(() => log("note via fetch", "ok"))
+      .catch(() => { const i = new Image(); i.src = BASE + "/note?" + q; log("note via img beacon (fetch failed)", "info"); });
+  }
+
+  document.getElementById("b-note").onclick = playNote;
+  document.getElementById("b-pm").onclick = probePostMessage;
+  document.getElementById("b-rerun").onclick = runAll;
+  document.getElementById("b-close").onclick = () =>
+    doSendMessage({ method: "close_and_send", params: [JSON.stringify(lines)] });
+
+  runAll();
+</script>
+</body>
+</html>
