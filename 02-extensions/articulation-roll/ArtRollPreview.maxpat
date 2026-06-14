@@ -20,7 +20,7 @@
                     "numoutlets": 0,
                     "patching_rect": [ 23.0, 10.0, 1080.0, 48.0 ],
                     "presentation_linecount": 3,
-                    "text": "ArtRoll Preview — bridges the Articulation Roll editor to this track. (1) OSC /artroll/note <pitch> <vel> <durMs> <ksPitch> <ksHoldMs> on UDP 7474 injects click/preview notes. (2) /artroll/play <songTimeMs> and /artroll/stop drive Live's REAL transport: set current_song_time to the locate, then (after a 30ms delay so Live commits the move) call start_playing on live_set — without the delay Live starts from its old position and ignores the locate. So the editor's Play hears the whole arrangement in sync, FROM the clicked position. (3) A metro polls current_song_time + is_playing and sends /artroll/pos <songTimeMs> <isPlaying> back on UDP 7476 so the editor playhead follows Live. midiin->midiout passes the track's own MIDI through (without it the device would swallow all MIDI and the track would go silent). Put this device on the edited track, BEFORE the instrument. ksPitch -1 = no keyswitch."
+                    "text": "ArtRoll Preview — bridges the Articulation Roll editor to this track. (1) OSC /artroll/note <pitch> <vel> <durMs> <ksPitch> <ksHoldMs> on UDP 7474 injects click/preview notes. (2) /artroll/play <songTimeMs> and /artroll/stop drive Live's REAL transport: set current_song_time to the locate, then (after a 30ms delay so Live commits the move) call start_playing on live_set — without the delay Live starts from its old position and ignores the locate. So the editor's Play hears the whole arrangement in sync, FROM the clicked position. (3) A metro polls current_song_time + is_playing and sends /artroll/pos <songTimeMs> <isPlaying> back on UDP 7476 so the editor playhead follows Live AND the editor knows transport sync is available (without these frames it falls back to a local single-clip playhead). The metro + Live-path are armed by live.thisdevice (on device load) AND by any incoming OSC (self-heal, so a paste-without-reload still starts reporting once the editor sends anything). midiin->midiout passes the track's own MIDI through (without it the device would swallow all MIDI and the track would go silent). Put this device on the edited track, BEFORE the instrument. ksPitch -1 = no keyswitch."
                 }
             },
             {
@@ -140,6 +140,17 @@
                     "outlettype": [ "bang" ],
                     "patching_rect": [ 760.0, 72.0, 60.0, 22.0 ],
                     "text": "loadbang"
+                }
+            },
+            {
+                "box": {
+                    "id": "obj-thisdevice",
+                    "maxclass": "newobj",
+                    "numinlets": 1,
+                    "numoutlets": 3,
+                    "outlettype": [ "bang", "bang", "" ],
+                    "patching_rect": [ 600.0, 36.0, 100.0, 22.0 ],
+                    "text": "live.thisdevice"
                 }
             },
             {
@@ -476,6 +487,30 @@
                 "patchline": {
                     "destination": [ "obj-metrostart", 0 ],
                     "source": [ "obj-load", 0 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-lpmsg", 0 ],
+                    "source": [ "obj-thisdevice", 0 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-metrostart", 0 ],
+                    "source": [ "obj-thisdevice", 0 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-lpmsg", 0 ],
+                    "source": [ "obj-1", 0 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-metrostart", 0 ],
+                    "source": [ "obj-1", 0 ]
                 }
             },
             {
