@@ -801,6 +801,89 @@
       if (any) { pushUndoState(pre); previewNote(first); requestDraw(); }
     }
 
+    // ---- Clipboard + keyboard editing (Wave A) ----
+    let clipboard = []; // internal copy buffer: {pitch, rel, duration, velocity, art, muted}
+
+    // Clamp a paste/duplicate start so the note stays inside the clip (mirrors placeNote).
+    function fitStart(start, dur) {
+      let s = clampBeat(start);
+      if (s + dur > clipDuration) s = Math.max(0, clipDuration - dur);
+      return s;
+    }
+
+    function copySelection() {
+      if (!selection.size) return;
+      const sel = notes.filter(n => selection.has(n._key));
+      const minStart = Math.min(...sel.map(n => n.startTime));
+      clipboard = sel.map(n => ({
+        pitch: n.pitch, rel: n.startTime - minStart, duration: n.duration,
+        velocity: n.velocity, art: n.art, muted: n.muted === true,
+      }));
+    }
+
+    function pasteClipboard(atBeat) {
+      if (!clipboard.length) return;
+      const pre = snapState();
+      const base = clampBeat(snapBeat(atBeat));
+      const made = clipboard.map(c => ({
+        _key: keyCounter++, id: undefined, pitch: c.pitch,
+        startTime: fitStart(base + c.rel, c.duration), duration: c.duration,
+        velocity: c.velocity, art: c.art, muted: c.muted,
+      }));
+      notes.push(...made);
+      selection = new Set(made.map(n => n._key));
+      pushUndoState(pre);
+      requestDraw();
+    }
+
+    function duplicateSelection() {
+      if (!selection.size) return;
+      const sel = notes.filter(n => selection.has(n._key));
+      const minStart = Math.min(...sel.map(n => n.startTime));
+      const maxEnd = Math.max(...sel.map(n => n.startTime + n.duration));
+      const span = maxEnd - minStart;            // Ableton "duplicate after"
+      const pre = snapState();
+      const made = sel.map(n => ({
+        _key: keyCounter++, id: undefined, pitch: n.pitch,
+        startTime: fitStart(n.startTime + span, n.duration), duration: n.duration,
+        velocity: n.velocity, art: n.art, muted: n.muted === true,
+      }));
+      notes.push(...made);
+      selection = new Set(made.map(n => n._key));
+      pushUndoState(pre);
+      requestDraw();
+    }
+
+    // ←/→ : shift selection by one grid step, group-clamped to [0, clipDuration].
+    function nudgeSelection(dir) {
+      if (!selection.size) return;
+      const step = snap > 0 ? snap : 0.25;
+      const sel = notes.filter(n => selection.has(n._key));
+      let delta = dir * step;
+      if (delta < 0) delta = Math.max(delta, -Math.min(...sel.map(n => n.startTime)));
+      else delta = Math.min(delta, clipDuration - Math.max(...sel.map(n => n.startTime + n.duration)));
+      if (Math.abs(delta) < 1e-9) return;
+      const pre = snapState();
+      for (const n of sel) n.startTime += delta;
+      pushUndoState(pre);
+      requestDraw();
+    }
+
+    // ↑/↓ : transpose selection, group-clamped to 0..127. Shift = ±octave.
+    function transposeSelection(semis) {
+      if (!selection.size) return;
+      const sel = notes.filter(n => selection.has(n._key));
+      let d = semis;
+      if (d < 0) d = Math.max(d, -Math.min(...sel.map(n => n.pitch)));
+      else d = Math.min(d, 127 - Math.max(...sel.map(n => n.pitch)));
+      if (d === 0) return;
+      const pre = snapState();
+      for (const n of sel) n.pitch += d;
+      pushUndoState(pre);
+      previewNote(sel[0]);
+      requestDraw();
+    }
+
     // ---- Interaction ----
     let drag = null; // { mode, ... }
     let lastClick = { t: 0, x: -99, y: -99 }; // manual double-press detection
@@ -814,6 +897,13 @@
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left, y = e.clientY - rect.top;
       hideCtxMenu();
+      // Ruler click = set the play-from locator (tool-independent). `marker`
+      // already drives togglePlayback and renders as a vertical line.
+      if (e.button === 0 && y < RULER && x >= GUTTER) {
+        marker = clampBeat(snapBeat(xToBeat(x)));
+        requestDraw();
+        return;
+      }
       if (inLane(x, y)) return onLaneDown(e, x, y);
       if (!inGrid(x, y)) return;
       if (e.button === 2) return onRightDown(e, x, y);
@@ -929,6 +1019,9 @@
     }
 
     function onPencilDown(e, x, y) {
+      // Cmd/Ctrl+click in pencil mode = select/marquee (delegate to the mouse tool)
+      // instead of drawing a note.
+      if (e.metaKey || e.ctrlKey) return onMouseToolDown(e, x, y);
       const hit = noteAt(x, y);
       if (hit) {
         const n = hit.note;
@@ -1207,6 +1300,10 @@
         requestDraw();
         return;
       }
+      // Clipboard — Cmd/Ctrl+C copy, +V paste at locator (or 0), +D duplicate-after.
+      if (cmd && k === "c") { e.preventDefault(); copySelection(); return; }
+      if (cmd && k === "v") { e.preventDefault(); pasteClipboard(marker != null ? marker : 0); return; }
+      if (cmd && k === "d") { e.preventDefault(); duplicateSelection(); return; }
       // Bare 1-9: assign selected notes to articulation N (artMap[N-1]). Cmd/Ctrl+1/2
       // is grid stepping (handled above, cmd-guarded), so these never collide.
       if (!cmd && e.key >= "1" && e.key <= "9") {
@@ -1225,6 +1322,23 @@
         for (const n of notes) if (selection.has(n._key)) n.muted = anyActive;
         pushUndoState(pre);
         requestDraw();
+        return;
+      }
+      // Tool hotkeys: bare b = pencil, a = mouse, c = cut (Cmd variants handled above).
+      if (!cmd && (k === "b" || k === "a" || k === "c")) {
+        e.preventDefault();
+        setTool(k === "b" ? "pencil" : k === "a" ? "mouse" : "cut");
+        return;
+      }
+      // Arrow keys: ←/→ nudge by grid; ↑/↓ transpose a semitone (Shift = octave).
+      if (!cmd && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+        e.preventDefault();
+        nudgeSelection(e.key === "ArrowRight" ? 1 : -1);
+        return;
+      }
+      if (!cmd && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+        e.preventDefault();
+        transposeSelection((e.key === "ArrowUp" ? 1 : -1) * (e.shiftKey ? 12 : 1));
         return;
       }
       if (cmd && k === "e") {
