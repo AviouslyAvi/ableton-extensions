@@ -221,7 +221,7 @@
     function pvConnect() {
       try {
         const sock = new WebSocket("ws://127.0.0.1:" + PV_PORT);
-        sock.onopen = () => { pvWs = sock; pvSetStatus(true); };
+        sock.onopen = () => { pvWs = sock; pvSetStatus(true); sock.send("ping"); };
         sock.onclose = () => { if (pvWs === sock) { pvWs = null; pvSetStatus(false); } };
         sock.onerror = () => {};
         sock.onmessage = (ev) => onPosFrame(String(ev.data));

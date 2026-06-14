@@ -155,6 +155,13 @@ export const startPreviewBridge = (opts: PreviewBridgeOptions = {}): PreviewBrid
       sendOsc("/artroll/stop", [1]);
       return true;
     }
+    // Wake/arm the device's transport reporting. An unrecognized address: the
+    // device's self-heal tap starts its metro + Live-path on ANY inbound OSC, so
+    // this gets sync flowing on modal open without a note or transport side effect.
+    if (text === "ping") {
+      sendOsc("/artroll/ping", [1]);
+      return true;
+    }
     return false;
   };
 
