@@ -957,6 +957,8 @@
 
     // ---- Clipboard + keyboard editing (Wave A) ----
     let clipboard = []; // internal copy buffer: {pitch, rel, duration, velocity, art, muted}
+    let clipSpan = 0;   // span (beats) of the copied block, for duplicate-after paste
+    let pasteAt = 0;    // default paste beat when there's no locator (tiles forward)
 
     // Clamp a paste/duplicate start so the note stays inside the clip (mirrors placeNote).
     function fitStart(start, dur) {
@@ -969,6 +971,9 @@
       if (!selection.size) return;
       const sel = notes.filter(n => selection.has(n._key));
       const minStart = Math.min(...sel.map(n => n.startTime));
+      const maxEnd = Math.max(...sel.map(n => n.startTime + n.duration));
+      clipSpan = maxEnd - minStart;
+      pasteAt = minStart + clipSpan;   // default paste lands right after the source (like Cmd+D)
       clipboard = sel.map(n => ({
         pitch: n.pitch, rel: n.startTime - minStart, duration: n.duration,
         velocity: n.velocity, art: n.art, muted: n.muted === true,
@@ -986,6 +991,7 @@
       }));
       notes.push(...made);
       selection = new Set(made.map(n => n._key));
+      pasteAt = base + clipSpan;   // tile the next no-locator paste forward by one span
       pushUndoState(pre);
       requestDraw();
     }
@@ -1039,8 +1045,9 @@
     }
 
     // Legato / length-to-next: stretch each note's duration to the start of the
-    // next note on the same pitch row; if none, extend to playEnd(). Floors at
-    // 1/32 so a note never collapses. Operates on the given keys.
+    // next note in time (any pitch — connects a melodic line end-to-end); if none
+    // follows, extend to playEnd(). Floors at 1/32 so a note never collapses.
+    // Operates on the given keys.
     function legatoKeys(keys) {
       const set = new Set(keys);
       const sel = notes.filter(n => set.has(n._key));
@@ -1051,7 +1058,7 @@
         let nextStart = playEnd();
         for (const m of notes) {
           if (m === n) continue;
-          if (m.pitch === n.pitch && m.startTime > n.startTime + 1e-6 && m.startTime < nextStart) {
+          if (m.startTime > n.startTime + 1e-6 && m.startTime < nextStart) {
             nextStart = m.startTime;
           }
         }
@@ -1488,15 +1495,19 @@
 
     // Wheel (Ableton parity): plain = vertical scroll, Shift = horizontal scroll,
     // Cmd/Ctrl = horizontal zoom about the cursor (ROW_H fixed — no pitch zoom).
-    // Zoom is sign-based (not delta-magnitude) so it behaves the same whether the
-    // platform reports pixel- or line-mode wheel deltas. Scroll-up/away zooms in.
+    // Scroll-up/away zooms in. The zoom factor scales with the scroll magnitude
+    // (normalized across pixel/line/page delta modes and clamped) so a trackpad —
+    // which fires many tiny events per gesture — doesn't compound into a huge jump.
     canvas.addEventListener("wheel", e => {
       e.preventDefault();
       if (e.ctrlKey || e.metaKey) {
         const rect = canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const beatAt = xToBeat(x);
-        const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+        // px-equivalent delta: lines ≈ 16px, pages ≈ 400px, then clamp one event.
+        let dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
+        dy = Math.max(-120, Math.min(120, dy));
+        const factor = Math.exp(-dy * 0.0100);
         pxPerBeat = Math.max(MIN_PPB, Math.min(MAX_PPB, pxPerBeat * factor));
         scrollX = beatAt * pxPerBeat - (x - GUTTER);
       } else if (e.shiftKey) {
@@ -1555,7 +1566,7 @@
       }
       // Clipboard — Cmd/Ctrl+C copy, +V paste at locator (or 0), +D duplicate-after.
       if (cmd && k === "c") { e.preventDefault(); copySelection(); return; }
-      if (cmd && k === "v") { e.preventDefault(); pasteClipboard(marker != null ? marker : 0); return; }
+      if (cmd && k === "v") { e.preventDefault(); pasteClipboard(marker != null ? marker : pasteAt); return; }
       if (cmd && k === "d") { e.preventDefault(); duplicateSelection(); return; }
       // Bare 1-9: assign selected notes to articulation N (artMap[N-1]). Cmd/Ctrl+1/2
       // is grid stepping (handled above, cmd-guarded), so these never collide.
