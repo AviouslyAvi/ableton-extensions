@@ -266,22 +266,43 @@ export function activate(activation: ActivationContext) {
 
   /** Open the roll for a clip; loops so a map edit re-opens with fresh data. */
   const openRoll = async (clip: MidiClip<V>): Promise<void> => {
-    // Audible preview for the modal session (webview -> :7475 -> UDP :7474 ->
-    // ArtRollPreview.amxd). Inert if the device/ports are absent.
-    const preview = startPreviewBridge();
+    // Audible preview + live-apply for the modal session (webview -> :7475 ->
+    // UDP :7474 -> ArtRollPreview.amxd; POST /apply -> clip writes). Inert if
+    // the device/ports are absent.
+    //
+    // liveApply is reassigned each loop iteration so it closes over THAT
+    // iteration's melodicOriginals — the id->original mapping is fixed for the
+    // modal session, so live writes preserve untouched note fields correctly.
+    let liveApply: (rollNotes: RollNote[]) => void = () => {};
+    const preview = startPreviewBridge({
+      onApply: (body) => {
+        const notes = (body as { notes?: RollNote[] } | null)?.notes;
+        if (Array.isArray(notes)) liveApply(notes);
+      },
+    });
     try {
-      await openRollLoop(clip);
+      await openRollLoop(clip, (fn) => {
+        liveApply = fn;
+      });
     } finally {
       preview.close();
     }
   };
 
-  const openRollLoop = async (clip: MidiClip<V>): Promise<void> => {
+  const openRollLoop = async (
+    clip: MidiClip<V>,
+    setLiveApply: (fn: (rollNotes: RollNote[]) => void) => void,
+  ): Promise<void> => {
     // eslint-disable-next-line no-constant-condition
     for (;;) {
       const map = loadMap();
       const ksPitches = new Set(map.map((a) => a.pitch));
       const melodicOriginals = clip.notes.filter((n) => !ksPitches.has(n.pitch));
+
+      // Live preview writes route here, quietly, using this iteration's originals.
+      setLiveApply((rollNotes) =>
+        applyResult(clip, melodicOriginals, rollNotes, { quiet: true }),
+      );
 
       const payload = buildPayload(clip, melodicOriginals);
       const html = rollHtml.replace("[/*__DATA__*/]", () => JSON.stringify(payload));
@@ -321,6 +342,7 @@ export function activate(activation: ActivationContext) {
     clip: MidiClip<V>,
     melodicOriginals: NoteDescription[],
     rollNotes: RollNote[],
+    opts: { quiet?: boolean } = {},
   ): void => {
     const map = loadMap();
     const ksPitches = new Set(map.map((a) => a.pitch));
@@ -341,9 +363,11 @@ export function activate(activation: ActivationContext) {
       context.withinTransaction(() => {
         clip.notes = merged;
       });
-      console.log(
-        `[articulation-roll] wrote ${melodic.length} melodic + ${ksNotes.length} keyswitch notes to "${clip.name}"`,
-      );
+      if (!opts.quiet) {
+        console.log(
+          `[articulation-roll] wrote ${melodic.length} melodic + ${ksNotes.length} keyswitch notes to "${clip.name}"`,
+        );
+      }
     } catch (err) {
       console.error("[articulation-roll] failed to write notes:", err);
     }

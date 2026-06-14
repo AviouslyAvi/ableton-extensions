@@ -393,6 +393,7 @@
       undoStack.push(s);
       if (undoStack.length > UNDO_MAX) undoStack.shift();
       redoStack.length = 0;
+      scheduleLiveApply(); // every committed edit drives the live clip write
     }
     function pushUndo() { pushUndoState(snapState()); }
     function restoreState(s) {
@@ -400,6 +401,43 @@
       marker = s.marker;
       selection = new Set([...selection].filter(k => notes.some(n => n._key === k)));
       requestDraw();
+      scheduleLiveApply(); // in-editor undo/redo also follows through to the clip
+    }
+
+    // ---- Live preview: write the clip mid-modal (no close) ----
+    // POST the full notes array to the host's /apply; the host writes clip.notes
+    // in a transaction so Live plays the REAL keyswitches in transport context
+    // as you edit. Debounced so rapid edits coalesce into fewer Live undo steps;
+    // the editor keeps its own fine-grained undo above. Fire-and-forget — if the
+    // bridge/host is absent it just no-ops (same failure mode as preview notes).
+    function serializeNotes() {
+      return notes.map(n => {
+        const o = {
+          pitch: n.pitch, startTime: n.startTime, duration: n.duration,
+          velocity: n.velocity, art: n.art ?? null, muted: n.muted === true,
+        };
+        if (typeof n.id === "number") o.id = n.id;
+        return o;
+      });
+    }
+    function liveApply() {
+      try {
+        fetch("http://127.0.0.1:" + PV_PORT + "/apply", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ notes: serializeNotes() }),
+          keepalive: true, // let the final flush survive modal teardown on cancel
+        }).catch(() => {});
+      } catch (_) { /* bridge absent */ }
+    }
+    let liveApplyTimer = 0;
+    function scheduleLiveApply() {
+      if (liveApplyTimer) clearTimeout(liveApplyTimer);
+      liveApplyTimer = setTimeout(liveApply, 200);
+    }
+    function flushLiveApply() {
+      if (liveApplyTimer) { clearTimeout(liveApplyTimer); liveApplyTimer = 0; }
+      liveApply();
     }
     function doUndo() {
       if (!undoStack.length) return;
@@ -1211,6 +1249,7 @@
       if (e.key === "Escape") {
         if (ctxMenu.style.display === "block") { hideCtxMenu(); return; }
         if (playing) { stopPlayback(); return; }
+        flushLiveApply(); // keep writes; flush the last edit before closing
         closeWith({ type: "cancel" });
         return;
       }
@@ -1335,20 +1374,12 @@
 
     document.getElementById("play-btn").onclick = togglePlayback;
 
-    document.getElementById("cancel-btn").onclick = () => { stopPlayback(); closeWith({ type: "cancel" }); };
+    // Cancel = close, KEEP live-applied writes (undo them via Live's own Cmd+Z).
+    // Flush so the last edit within the debounce window isn't lost.
+    document.getElementById("cancel-btn").onclick = () => { stopPlayback(); flushLiveApply(); closeWith({ type: "cancel" }); };
     document.getElementById("apply-btn").onclick = () => {
       stopPlayback();
-      closeWith({
-        type: "apply",
-        notes: notes.map(n => {
-          const o = {
-            pitch: n.pitch, startTime: n.startTime, duration: n.duration,
-            velocity: n.velocity, art: n.art ?? null, muted: n.muted === true,
-          };
-          if (typeof n.id === "number") o.id = n.id;
-          return o;
-        }),
-      });
+      closeWith({ type: "apply", notes: serializeNotes() });
     };
 
     // ---- Map editor ----
