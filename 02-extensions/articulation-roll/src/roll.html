@@ -245,6 +245,13 @@
     // Clip's arrangement start (beats). Live reports global song time; subtract
     // this to place the playhead in clip-local coordinates.
     const CLIP_START = (DATA.clip && typeof DATA.clip.startTime === "number") ? DATA.clip.startTime : 0;
+    // Loop region (clip-local beats). Host sends the clip's loop; fall back to the
+    // whole clip if it's absent or degenerate. LOOPING mirrors the clip's toggle.
+    const LOOPING = !!(DATA.clip && DATA.clip.looping);
+    let LOOP_START = (DATA.clip && typeof DATA.clip.loopStart === "number") ? DATA.clip.loopStart : 0;
+    let LOOP_END = (DATA.clip && typeof DATA.clip.loopEnd === "number") ? DATA.clip.loopEnd : clipDuration;
+    if (!(LOOP_END > LOOP_START)) { LOOP_START = 0; LOOP_END = clipDuration; }
+    const playEnd = () => LOOPING ? LOOP_END : clipDuration;
     let playing = false;
     let syncMode = false;    // true => playhead driven by Live's reported time
     let playTimers = [];
@@ -295,14 +302,57 @@
       updatePlayBtn();
       requestDraw();
     }
+    // Keep the playhead on screen during playback: if it leaves the grid view,
+    // page scrollX so it sits a little in from the left edge.
+    function followPlayhead(beat) {
+      const x = beatToX(beat);
+      if (x < GUTTER || x > GUTTER + gridW()) {
+        scrollX = Math.max(0, beat * pxPerBeat - 24);
+        clampScroll();
+      }
+    }
     function playLoop() {
+      const b = playheadBeat();
+      if (b != null) followPlayhead(b);
       requestDraw();
       if (playing) playRAF = requestAnimationFrame(playLoop);
+    }
+    // Schedule one playback window [fromBeat, playEnd()) out the bridge. At the
+    // window end, loop back to LOOP_START (if LOOPING) or stop. Notes whose tail
+    // crosses the window end are clamped so they don't ring past the loop point.
+    function scheduleSoftwareWindow(fromBeat) {
+      const end = playEnd();
+      const upcoming = notes
+        .filter(n => !n.muted && n.startTime >= fromBeat - 1e-6 && n.startTime < end - 1e-6)
+        .sort((a, b) => a.startTime - b.startTime);
+      for (const n of upcoming) {
+        const delayMs = (n.startTime - fromBeat) * SEC_PER_BEAT * 1000;
+        const playableBeats = Math.min(n.duration, end - n.startTime); // clamp at window end
+        const durMs = Math.max(20, playableBeats * SEC_PER_BEAT * 1000);
+        const vel = typeof n.velocity === "number" ? n.velocity : 100;
+        const { ksPitch, ksHold } = pvKsFor(n, durMs);
+        playTimers.push(setTimeout(() => pvSend(n.pitch, vel, durMs, ksPitch, ksHold), delayMs));
+      }
+      // at window end: loop (restart at LOOP_START) or stop, a hair late
+      const spanMs = (end - fromBeat) * SEC_PER_BEAT * 1000;
+      playTimers.push(setTimeout(() => {
+        if (!playing) return;
+        if (LOOPING) {
+          playStartBeat = LOOP_START;
+          playStartMs = performance.now();
+          playTimers = [];                 // this window's timers have all fired
+          scheduleSoftwareWindow(LOOP_START);
+        } else {
+          stopPlayback();
+        }
+      }, spanMs + 60));
     }
     function startPlayback(fromBeat) {
       stopPlayback();
       fromBeat = Math.max(0, fromBeat || 0);
       if (fromBeat >= clipDuration) fromBeat = 0;
+      // When looping, a play-from outside the loop region snaps to the loop start.
+      if (LOOPING && (fromBeat < LOOP_START || fromBeat >= LOOP_END)) fromBeat = LOOP_START;
       playing = true;
       playStartBeat = fromBeat;
       playStartMs = performance.now();
@@ -310,7 +360,7 @@
       if (syncAvail()) {
         // Synced: start Live's real transport at this clip's position. Live plays
         // the actual notes (and the rest of the arrangement) — don't double them
-        // out the bridge.
+        // out the bridge. Live loops the clip natively, so no software window.
         syncMode = true;
         syncBeat = fromBeat;
         pvCmd("play " + Math.round((CLIP_START + fromBeat) * 1000));
@@ -321,18 +371,7 @@
 
       // Software fallback: sequence the clip's own notes out the bridge.
       syncMode = false;
-      const upcoming = notes
-        .filter(n => !n.muted && n.startTime >= fromBeat - 1e-6)
-        .sort((a, b) => a.startTime - b.startTime);
-      for (const n of upcoming) {
-        const delayMs = (n.startTime - fromBeat) * SEC_PER_BEAT * 1000;
-        const durMs = Math.max(20, n.duration * SEC_PER_BEAT * 1000);
-        const vel = typeof n.velocity === "number" ? n.velocity : 100;
-        const { ksPitch, ksHold } = pvKsFor(n, durMs);
-        playTimers.push(setTimeout(() => pvSend(n.pitch, vel, durMs, ksPitch, ksHold), delayMs));
-      }
-      // stop a hair after the clip end
-      playTimers.push(setTimeout(stopPlayback, (clipDuration - fromBeat) * SEC_PER_BEAT * 1000 + 60));
+      scheduleSoftwareWindow(fromBeat);
       updatePlayBtn();
       playLoop();
     }

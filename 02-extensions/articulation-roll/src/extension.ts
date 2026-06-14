@@ -223,7 +223,16 @@ export function activate(activation: ActivationContext) {
 
   type RollPayload = {
     schema: string;
-    clip: { name: string; startTime: number; duration: number };
+    clip: {
+      name: string;
+      startTime: number;
+      duration: number;
+      // Loop region in CLIP-LOCAL beats (see clipLoop). Drives in-editor loop
+      // playback; the synced path lets Live loop natively.
+      looping: boolean;
+      loopStart: number;
+      loopEnd: number;
+    };
     grid: { snap: number; default: number };
     tempo: number;
     notes: RollNote[];
@@ -242,12 +251,50 @@ export function activate(activation: ActivationContext) {
     }
   };
 
+  // Loop region for in-editor loop playback. The roll's note startTimes are
+  // clip-local (0 = clip start), so the loop bounds must be too. The SDK's
+  // loopStart/loopEnd are believed clip-local; we log once on first open so a
+  // live test can confirm — if Live ever reports them arrangement-global,
+  // subtract clip.startTime here (the only place that would change).
+  let loopLogged = false;
+  const clipLoop = (
+    clip: MidiClip<V>,
+  ): { looping: boolean; loopStart: number; loopEnd: number } => {
+    try {
+      const looping = clip.looping === true;
+      const loopStart = clip.loopStart;
+      const loopEnd = clip.loopEnd;
+      if (!loopLogged) {
+        loopLogged = true;
+        console.log(
+          `[articulation-roll] loop: looping=${looping} loopStart=${loopStart} ` +
+            `loopEnd=${loopEnd} (clip.startTime=${clip.startTime} duration=${clip.duration}) ` +
+            `— expect clip-local (loopEnd ≈ duration for a full-clip loop, not startTime+duration)`,
+        );
+      }
+      if (typeof loopStart === "number" && typeof loopEnd === "number" && loopEnd > loopStart) {
+        return { looping, loopStart, loopEnd };
+      }
+    } catch (err) {
+      console.warn("[articulation-roll] loop read failed; defaulting to full clip:", err);
+    }
+    return { looping: false, loopStart: 0, loopEnd: clip.duration };
+  };
+
   const buildPayload = (clip: MidiClip<V>, melodicOriginals: NoteDescription[]): RollPayload => {
     const map = loadMap();
     const arts = artForMelodicNotes(clip.notes, melodicOriginals, map);
+    const loop = clipLoop(clip);
     return {
       schema: "1.1.0",
-      clip: { name: clip.name, startTime: clip.startTime, duration: clip.duration },
+      clip: {
+        name: clip.name,
+        startTime: clip.startTime,
+        duration: clip.duration,
+        looping: loop.looping,
+        loopStart: loop.loopStart,
+        loopEnd: loop.loopEnd,
+      },
       grid: { snap: DEFAULT_GRID, default: DEFAULT_GRID },
       tempo: songTempo(),
       // id = index into melodicOriginals, used to preserve untouched fields on
