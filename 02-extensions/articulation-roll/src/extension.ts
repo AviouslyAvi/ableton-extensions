@@ -39,6 +39,12 @@ type RollNote = NoteDescription & { id?: number; art?: string | null };
 
 const TRIGGER_DURATION = 0.25; // beats, for non-held keyswitches
 const MIN_DURATION = 1e-4; // guard against zero/negative note lengths
+// Pre-roll nudge: emit each keyswitch a hair before the note it governs so a
+// sample-library's keyswitch is registered BEFORE the melodic note sounds.
+// Perfectly-quantized (coincident) keyswitches sometimes lose the race and the
+// note plays with the wrong/previous articulation. 1/64 note = 0.0625 beat
+// (~31 ms at 120 BPM) is small enough to stay inside the note's grid cell.
+const KS_PREROLL = 0.0625;
 const MAP_FILENAME = "articulations.json";
 const DEFAULT_GRID = 0.25; // 1/16 note: default snap + seed "remembered length"
 
@@ -142,9 +148,11 @@ export function activate(activation: ActivationContext) {
     const byName = new Map<string, Articulation>();
     for (const a of map) byName.set(a.name, a);
 
-    const sorted = [...rollNotes].sort(
-      (a, b) => a.startTime - b.startTime || a.pitch - b.pitch,
-    );
+    // Deactivated (muted) notes emit no keyswitch — they're silent, so their
+    // articulation shouldn't fire. Excluded, not run-breaking (mirrors laneSpans).
+    const sorted = [...rollNotes]
+      .filter((n) => !n.muted)
+      .sort((a, b) => a.startTime - b.startTime || a.pitch - b.pitch);
 
     type Run = { art: Articulation; start: number; lastEnd: number };
     const runs: Run[] = [];
@@ -166,7 +174,9 @@ export function activate(activation: ActivationContext) {
     const seen = new Set<string>();
     const out: NoteDescription[] = [];
     for (const r of runs) {
-      const start = Math.max(0, Math.min(r.start, clipDuration));
+      // Nudge the keyswitch a touch earlier than its run (clamped at 0) so it
+      // lands before the note; held keyswitches then also span the pre-roll.
+      const start = Math.max(0, Math.min(r.start, clipDuration) - KS_PREROLL);
       const span = Math.max(TRIGGER_DURATION, r.lastEnd - start);
       const duration = r.art.hold ? span : TRIGGER_DURATION;
       const key = `${r.art.pitch}@${start.toFixed(6)}`;
@@ -204,6 +214,7 @@ export function activate(activation: ActivationContext) {
       startTime: Math.max(0, n.startTime),
       duration: Math.max(MIN_DURATION, n.duration),
       velocity,
+      muted: n.muted === true, // deactivate-note state (toggled by key 0 in the roll)
     };
     return merged as NoteDescription;
   };
