@@ -101,12 +101,22 @@ const wsDecodeFrames = (data: Buffer): string[] => {
 
 export type PreviewBridge = { close: () => void };
 
+export type PreviewBridgeOptions = {
+  /**
+   * Called when the webview POSTs /apply (live preview). Receives the parsed
+   * JSON body — the host writes it to the clip WITHOUT closing the modal, so
+   * Live plays the real keyswitches in transport context as the user edits.
+   * Never let this throw across the HTTP handler.
+   */
+  onApply?: (body: unknown) => void;
+};
+
 /**
  * Start the side-channel server + UDP sockets for one modal session.
  * Never throws: a port collision (stale host, second Live) just logs and
  * returns an inert bridge — the editor stays usable, silently.
  */
-export const startPreviewBridge = (): PreviewBridge => {
+export const startPreviewBridge = (opts: PreviewBridgeOptions = {}): PreviewBridge => {
   const udp = dgram.createSocket("udp4");
 
   const sendOsc = (address: string, ints: number[]) => {
@@ -170,6 +180,27 @@ export const startPreviewBridge = (): PreviewBridge => {
         res.writeHead(200, { ...cors, "Content-Type": "application/json" });
         res.end(JSON.stringify({ ok: true }));
       }
+      return;
+    }
+    // Live preview: webview POSTs the full notes array; host writes the clip
+    // without closing the modal. Body can be large, so this is POST (not a WS
+    // frame — wsTextFrame only handles <=125 bytes).
+    if (req.method === "POST" && url.pathname === "/apply") {
+      let body = "";
+      req.on("data", (c) => {
+        body += c;
+        if (body.length > 8_000_000) req.destroy(); // sanity cap
+      });
+      req.on("end", () => {
+        try {
+          opts.onApply?.(JSON.parse(body));
+        } catch (err) {
+          log("apply failed:", (err as Error).message);
+        }
+        res.writeHead(200, { ...cors, "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+      });
+      req.on("error", () => res.destroy());
       return;
     }
     res.writeHead(404, cors);
