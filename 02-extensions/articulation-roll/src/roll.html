@@ -133,6 +133,7 @@
     <label>Articulation</label>
     <select class="alx-input" id="art-select"></select>
     <button class="alx-button small" id="selector-toggle" title="Articulation Selector Mode: clicking a note converts it to the current articulation.">Art. select: off</button>
+    <button class="alx-button small" id="scale-toggle" title="Snap to Scale: placed, transposed and dragged notes snap to Live's current scale.">Scale: off</button>
     <label>Snap</label>
     <select class="alx-input" id="snap-select">
       <option value="4">1/1</option>
@@ -426,6 +427,32 @@
     let snap = DATA.grid && DATA.grid.snap != null ? DATA.grid.snap : 0.25;
     let lastLength = DATA.grid && DATA.grid.default ? DATA.grid.default : 0.25;
     let currentArt = artMap.length ? artMap[0].name : null;
+
+    // Live's current scale, for the optional snap-to-scale toggle. SCALE.set is
+    // the set of in-scale pitch classes (root + each interval, mod 12), so any
+    // MIDI pitch's membership is `SCALE.set.has(pitch % 12)`. null = unavailable
+    // (host couldn't read the song, or no intervals) -> snapping is a no-op.
+    const SCALE = (() => {
+      const sc = DATA.scale;
+      if (!sc || !Array.isArray(sc.intervals) || !sc.intervals.length) return null;
+      const root = ((Number(sc.root) % 12) + 12) % 12;
+      const set = new Set(sc.intervals.map(i => (((root + Number(i)) % 12) + 12) % 12));
+      if (!set.size) return null;
+      return { root, set, name: typeof sc.name === "string" ? sc.name : "" };
+    })();
+    let scaleOn = false;                    // snap-to-scale toggle (default off)
+
+    // Nearest in-scale pitch: search outward from p (down before up at each step),
+    // clamped 0..127. Off / no scale -> identity.
+    function snapPitchToScale(p) {
+      if (!scaleOn || !SCALE) return p;
+      for (let d = 0; d <= 12; d++) {
+        const lo = p - d, hi = p + d;
+        if (lo >= 0 && SCALE.set.has(((lo % 12) + 12) % 12)) return lo;
+        if (hi <= 127 && SCALE.set.has(((hi % 12) + 12) % 12)) return hi;
+      }
+      return p;
+    }
 
     let keyCounter = 1;
     // Melodic notes — keep host-sent fields; `id` (if present) ties back to an
@@ -885,7 +912,7 @@
 
     // ---- Note helpers ----
     function placeNote(x, y) {
-      const pitch = Math.max(0, Math.min(127, yToPitch(y)));
+      const pitch = snapPitchToScale(Math.max(0, Math.min(127, yToPitch(y))));
       const start = clampBeat(snapBeat(xToBeat(x)));
       const n = {
         _key: keyCounter++, id: undefined, pitch, startTime: start,
@@ -1005,11 +1032,35 @@
       else d = Math.min(d, 127 - Math.max(...sel.map(n => n.pitch)));
       if (d === 0) return;
       const pre = snapState();
-      for (const n of sel) n.pitch += d;
+      for (const n of sel) n.pitch = snapPitchToScale(n.pitch + d);
       pushUndoState(pre);
       previewNote(sel[0]);
       requestDraw();
     }
+
+    // Legato / length-to-next: stretch each note's duration to the start of the
+    // next note on the same pitch row; if none, extend to playEnd(). Floors at
+    // 1/32 so a note never collapses. Operates on the given keys.
+    function legatoKeys(keys) {
+      const set = new Set(keys);
+      const sel = notes.filter(n => set.has(n._key));
+      if (!sel.length) return;
+      const pre = snapState();
+      let changed = false;
+      for (const n of sel) {
+        let nextStart = playEnd();
+        for (const m of notes) {
+          if (m === n) continue;
+          if (m.pitch === n.pitch && m.startTime > n.startTime + 1e-6 && m.startTime < nextStart) {
+            nextStart = m.startTime;
+          }
+        }
+        const dur = Math.max(0.03125, nextStart - n.startTime);
+        if (Math.abs(dur - n.duration) > 1e-6) { n.duration = dur; changed = true; }
+      }
+      if (changed) { pushUndoState(pre); requestDraw(); }
+    }
+    function legatoSelection() { if (selection.size) legatoKeys([...selection]); }
 
     // ---- Interaction ----
     let drag = null; // { mode, ... }
@@ -1328,7 +1379,7 @@
           const n = notes.find(q => q._key === k);
           if (!n) continue;
           n.startTime = o.startTime + dB;
-          n.pitch = o.pitch + dP;
+          n.pitch = snapPitchToScale(o.pitch + dP);
         }
         if (dB !== 0 || dP !== 0) drag.changed = true;
         // audible pitch feedback while dragging (anchor note stands in)
@@ -1527,6 +1578,8 @@
         setTool(k === "b" ? "pencil" : k === "a" ? "mouse" : "cut");
         return;
       }
+      // Bare L: legato — stretch selected notes to the next note on their row.
+      if (!cmd && k === "l") { e.preventDefault(); legatoSelection(); return; }
       // Arrow keys: ←/→ nudge by grid; ↑/↓ transpose a semitone (Shift = octave).
       if (!cmd && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
         e.preventDefault();
@@ -1613,6 +1666,7 @@
       const sep = document.createElement("div");
       sep.className = "ctx-sep";
       ctxMenu.appendChild(sep);
+      addItem("Legato (length to next)", null, () => legatoKeys(keys));
       addItem("Delete", null, () => {
         pushUndo();
         const set = new Set(keys);
@@ -1682,6 +1736,22 @@
       selectorToggle.classList.toggle("toggled", selectorMode);
       selectorToggle.textContent = "Art. select: " + (selectorMode ? "on" : "off");
     };
+
+    // Snap-to-Scale toggle. Disabled (and labelled) when the host couldn't read
+    // a scale; otherwise the title surfaces the scale name.
+    const scaleToggle = document.getElementById("scale-toggle");
+    if (!SCALE) {
+      scaleToggle.disabled = true;
+      scaleToggle.textContent = "Scale: n/a";
+      scaleToggle.title = "Snap to Scale unavailable — Live didn't report a scale for this song.";
+    } else {
+      if (SCALE.name) scaleToggle.title += " (" + SCALE.name + ")";
+      scaleToggle.onclick = () => {
+        scaleOn = !scaleOn;
+        scaleToggle.classList.toggle("toggled", scaleOn);
+        scaleToggle.textContent = "Scale: " + (scaleOn ? "on" : "off");
+      };
+    }
 
     document.getElementById("play-btn").onclick = togglePlayback;
 

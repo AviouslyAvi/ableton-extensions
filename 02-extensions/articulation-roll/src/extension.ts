@@ -235,6 +235,8 @@ export function activate(activation: ActivationContext) {
     };
     grid: { snap: number; default: number };
     tempo: number;
+    // Live's current scale, for the roll's optional snap-to-scale toggle.
+    scale: { root: number; intervals: number[]; name: string; mode: boolean };
     notes: RollNote[];
     articulations: Articulation[];
   };
@@ -281,6 +283,23 @@ export function activate(activation: ActivationContext) {
     return { looping: false, loopStart: 0, loopEnd: clip.duration };
   };
 
+  // Live's current scale (root + semitone intervals), for the roll's optional
+  // snap-to-scale toggle. Defaults to a chromatic C if the song can't be read.
+  const songScale = (): { root: number; intervals: number[]; name: string; mode: boolean } => {
+    try {
+      const song = context.application.song;
+      const intervals = Array.isArray(song.scaleIntervals) ? song.scaleIntervals.map(Number) : [];
+      return {
+        root: Number(song.rootNote) || 0,
+        intervals,
+        name: typeof song.scaleName === "string" ? song.scaleName : "",
+        mode: song.scaleMode === true,
+      };
+    } catch {
+      return { root: 0, intervals: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], name: "", mode: false };
+    }
+  };
+
   const buildPayload = (clip: MidiClip<V>, melodicOriginals: NoteDescription[]): RollPayload => {
     const map = loadMap();
     const arts = artForMelodicNotes(clip.notes, melodicOriginals, map);
@@ -297,6 +316,7 @@ export function activate(activation: ActivationContext) {
       },
       grid: { snap: DEFAULT_GRID, default: DEFAULT_GRID },
       tempo: songTempo(),
+      scale: songScale(),
       // id = index into melodicOriginals, used to preserve untouched fields on
       // apply; art = derived from the clip's existing keyswitch notes.
       notes: melodicOriginals.map((n, i) => ({ ...n, id: i, art: arts[i] ?? null })),
