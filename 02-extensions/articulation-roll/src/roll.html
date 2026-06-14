@@ -1273,10 +1273,16 @@
         const n = hit.note;
         lastLength = n.duration;
         if (hit.zone === "body") previewNote(n);
-        selection = new Set([n._key]);
         if (hit.zone === "resize-r" || hit.zone === "resize-l") {
+          // Edge-resize honors an existing multi-selection (parity with the
+          // mouse tool): keep the selection if the grabbed note is part of it,
+          // so dragging an edge extends every selected note together. Collapse
+          // to the single note only when grabbing an edge outside the selection.
+          if (!selection.has(n._key)) selection = new Set([n._key]);
           drag = startResizeDrag(n, hit.zone === "resize-l" ? "l" : "r");
         } else {
+          // Body grab in pencil mode = single-note move/edit.
+          selection = new Set([n._key]);
           drag = {
             mode: "move", anchor: n,
             grabBeat: xToBeat(x) - n.startTime, grabPitch: yToPitch(y) - n.pitch,
