@@ -417,6 +417,8 @@
     const ROW_H = 12, MIN_PPB = 8, MAX_PPB = 400;
     const BEATS_PER_BAR = 4;           // display default (4/4)
     const EDGE = 6;                    // px hot-zone for the resize handle
+    const VEL_LANE = 56;               // velocity lane height (px), between grid and artic lane
+    const BOTTOM = () => LANE + VEL_LANE; // bottom chrome below the grid (vel + artic lanes)
 
     // ---- State ----
     const clipDuration = Math.max(0.25, DATA.clip.duration || 4);
@@ -556,7 +558,7 @@
     }
 
     const gridW = () => Math.max(10, viewW - GUTTER);
-    const gridH = () => Math.max(10, viewH - RULER - LANE);
+    const gridH = () => Math.max(10, viewH - RULER - BOTTOM());
     const contentH = () => 128 * ROW_H;
     const contentW = () => clipDuration * pxPerBeat;
 
@@ -572,6 +574,14 @@
     const yToPitch = y => 127 - Math.floor((y - RULER + scrollY) / ROW_H);
     const snapBeat = b => snap > 0 ? Math.round(b / snap) * snap : b;
     const clampBeat = b => Math.max(0, Math.min(b, clipDuration));
+
+    // ---- Velocity lane geometry (Wave D) ----
+    const VEL_PAD = 6;
+    const velBaseline = () => viewH - LANE - VEL_PAD;          // stems sit on this line
+    const velTopY = () => viewH - BOTTOM() + VEL_PAD;          // top of the tallest stem
+    const velUsableH = () => Math.max(8, velBaseline() - velTopY());
+    const velToY = v => velBaseline() - (Math.max(1, Math.min(127, v)) / 127) * velUsableH();
+    const yToVel = y => Math.max(1, Math.min(127, Math.round((velBaseline() - y) / velUsableH() * 127)));
 
     // ---- Articulation colors ----
     function artColor(name, alpha) {
@@ -596,6 +606,7 @@
       drawOverlays();
       drawKeyboard();
       drawRuler();
+      drawVelLane();
       drawLane();
       // top-left corner cap
       ctx.fillStyle = "var(--c-bg--0500)";
@@ -791,6 +802,43 @@
       ctx.restore();
     }
 
+    // Velocity lane: a stem + head per non-muted note, height ∝ velocity.
+    function drawVelLane() {
+      const gw = gridW(), top = viewH - BOTTOM();
+      fillRect(0, top, viewW, VEL_LANE, cssVar("--c-control-bg--500"));
+      ctx.strokeStyle = cssVar("--c-control-border");
+      ctx.beginPath(); ctx.moveTo(0, top + 0.5); ctx.lineTo(viewW, top + 0.5); ctx.stroke();
+      // label gutter
+      ctx.fillStyle = cssVar("--c-text-secondary");
+      ctx.font = "9px sans-serif"; ctx.textBaseline = "middle"; ctx.textAlign = "right";
+      ctx.fillText("Vel.", GUTTER - 3, top + VEL_LANE / 2);
+
+      ctx.save();
+      ctx.beginPath(); ctx.rect(GUTTER, top, gw, VEL_LANE); ctx.clip();
+      const base = velBaseline();
+      const accent = cssVar("--c-highlight--primary");
+      // faint baseline
+      ctx.strokeStyle = cssVar("--c-control-border");
+      ctx.globalAlpha = 0.6;
+      ctx.beginPath(); ctx.moveTo(GUTTER, Math.round(base) + 0.5); ctx.lineTo(GUTTER + gw, Math.round(base) + 0.5); ctx.stroke();
+      ctx.globalAlpha = 1;
+      for (const n of notes) {
+        if (n.muted) continue;
+        const x = beatToX(n.startTime);
+        if (x < GUTTER - 2 || x > GUTTER + gw + 2) continue;
+        const y = velToY(n.velocity || 100);
+        const selected = selection.has(n._key);
+        const col = selected ? accent : (n.art ? artColor(n.art, 0.85) : accent);
+        const px = Math.round(x) + 0.5;
+        ctx.strokeStyle = col; ctx.lineWidth = selected ? 2 : 1;
+        ctx.beginPath(); ctx.moveTo(px, base); ctx.lineTo(px, y); ctx.stroke();
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.arc(px, y, selected ? 3 : 2.2, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.lineWidth = 1;
+      ctx.restore();
+    }
+
     // ---- Hit testing ----
     function noteAt(x, y) {
       for (let i = notes.length - 1; i >= 0; i--) {
@@ -816,7 +864,23 @@
     const keysInRange = (s, e) =>
       notes.filter(n => n.startTime >= s && n.startTime < e).map(n => n._key);
 
-    const inGrid = (x, y) => x >= GUTTER && y >= RULER && y <= viewH - LANE;
+    // Velocity-lane hit testing: bars live at each note's startTime x.
+    function velNotesNearX(px, tol) {
+      tol = tol == null ? 5 : tol;
+      return notes.filter(n => !n.muted && Math.abs(beatToX(n.startTime) - px) <= tol);
+    }
+    function velNoteAt(px) {
+      let best = null, bd = 1e9;
+      for (const n of notes) {
+        if (n.muted) continue;
+        const d = Math.abs(beatToX(n.startTime) - px);
+        if (d < bd && d <= 5) { bd = d; best = n; }
+      }
+      return best;
+    }
+
+    const inGrid = (x, y) => x >= GUTTER && y >= RULER && y <= viewH - BOTTOM();
+    const inVelLane = (x, y) => x >= GUTTER && y > viewH - BOTTOM() && y < viewH - LANE;
     const inLane = (x, y) => x >= GUTTER && y >= viewH - LANE;
 
     // ---- Note helpers ----
@@ -967,6 +1031,7 @@
         requestDraw();
         return;
       }
+      if (e.button === 0 && inVelLane(x, y)) return onVelDown(e, x, y);
       if (inLane(x, y)) return onLaneDown(e, x, y);
       if (!inGrid(x, y)) return;
       if (e.button === 2) return onRightDown(e, x, y);
@@ -988,6 +1053,66 @@
       const beat = clampBeat(snapBeat(rawBeat));
       drag = { mode: "paint", start: beat, end: beat, moved: false, hitSpan: span };
       requestDraw();
+    }
+
+    // Velocity-lane drag. Three modes decided at press:
+    //  • ramp (Shift)        — straight line press→cursor; crossed notes take the
+    //                          interpolated velocity at their x.
+    //  • proportional        — anchor is part of a multi-selection: scale every
+    //                          selected note by target/anchorOrig (keeps dynamics).
+    //  • freehand (default)  — sweep: each bar the cursor crosses takes the
+    //                          cursor's velocity.
+    function onVelDown(e, x, y) {
+      const anchor = velNoteAt(x);
+      let velMode;
+      if (e.shiftKey) velMode = "ramp";
+      else if (anchor && selection.has(anchor._key) && selection.size > 1) velMode = "proportional";
+      else velMode = "freehand";
+      drag = {
+        mode: "velocity", velMode,
+        pre: snapState(),
+        orig: new Map(notes.map(n => [n._key, n.velocity || 100])), // for deterministic modes
+        anchor: anchor || null,
+        anchorOrig: anchor ? (anchor.velocity || 100) : 100,
+        startX: x, startY: y, changed: false,
+      };
+      applyVelDrag(x, y);
+      requestDraw();
+    }
+
+    function applyVelDrag(cx, cy) {
+      const m = drag;
+      if (m.velMode === "freehand") {
+        // accumulative sweep — don't reset, paint bars as the cursor passes them
+        const targets = velNotesNearX(cx, 5);
+        if (targets.length) {
+          const v = yToVel(cy);
+          for (const n of targets) { n.velocity = v; m.changed = true; }
+        }
+        return;
+      }
+      // ramp + proportional are deterministic: reset to captured originals first
+      for (const n of notes) { const o = m.orig.get(n._key); if (o != null) n.velocity = o; }
+      if (m.velMode === "proportional") {
+        const ratio = yToVel(cy) / (m.anchorOrig || 100);
+        for (const n of notes) {
+          if (n.muted || !selection.has(n._key)) continue;
+          const o = m.orig.get(n._key) || 100;
+          n.velocity = Math.max(1, Math.min(127, Math.round(o * ratio)));
+          m.changed = true;
+        }
+      } else { // ramp
+        const x0 = m.startX, y0 = m.startY, dx = cx - x0;
+        const lo = Math.min(x0, cx), hi = Math.max(x0, cx);
+        for (const n of notes) {
+          if (n.muted) continue;
+          const nx = beatToX(n.startTime);
+          if (nx < lo - 1 || nx > hi + 1) continue;
+          const t = Math.abs(dx) < 1e-6 ? 1 : (nx - x0) / dx;
+          n.velocity = yToVel(y0 + t * (cy - y0));
+          m.changed = true;
+        }
+      }
     }
 
     function onRightDown(e, x, y) {
@@ -1139,6 +1264,11 @@
         return;
       }
 
+      if (drag.mode === "velocity") {
+        applyVelDrag(x, y);
+        requestDraw();
+        return;
+      }
       if (drag.mode === "paint") {
         drag.end = clampBeat(snapBeat(xToBeat(x)));
         if (Math.abs(drag.end - drag.start) > 1e-6) drag.moved = true;
@@ -1295,6 +1425,11 @@
         lastLength = drag.note.duration;
       } else if (drag.mode === "move") {
         if (drag.pre && drag.changed) pushUndoState(drag.pre);
+      } else if (drag.mode === "velocity") {
+        if (drag.changed) {
+          pushUndoState(drag.pre);                 // → auto live-apply (velocity is serialized)
+          if (drag.anchor) previewNote(drag.anchor);
+        }
       }
       drag = null;
       requestDraw();
