@@ -71,6 +71,25 @@
     .alx-button.tool.active, .alx-button.toggled { background-color: var(--c-highlight--primary); color: var(--c-control-on-foreground); }
     .swatch { width: 11px; height: 11px; border-radius: 2px; display: inline-block; vertical-align: -1px; }
 
+    /* Articulation legend + status bar */
+    .legendbar {
+      display: flex; align-items: center; gap: 0.5em;
+      padding: 0.3em 0.6em; flex: 0 0 auto;
+      border-bottom: 1px solid var(--c-control-border);
+    }
+    .legend-chips { display: flex; align-items: center; gap: 0.4em; overflow: hidden; flex: 1 1 auto; }
+    .legend-chip {
+      display: inline-flex; align-items: center; gap: 0.35em;
+      height: 18px; padding: 0 0.55em; border-radius: 1em;
+      background: var(--c-control-bg--500); border: 1px solid var(--c-control-border);
+      cursor: pointer; user-select: none; white-space: nowrap; color: var(--c-text-primary);
+    }
+    .legend-chip:hover { background: var(--c-control-bg--400); }
+    .legend-chip.current { outline: 1px solid var(--c-highlight--primary); outline-offset: -1px; }
+    .legend-chip .num { color: var(--c-text-secondary); font-variant-numeric: tabular-nums; }
+    .legend-status { color: var(--c-text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; flex: 0 0 auto; }
+    .legend-empty { color: var(--c-text-secondary); }
+
     /* Right-click context menu */
     .ctx-menu {
       position: absolute; display: none; z-index: 10; min-width: 140px;
@@ -129,6 +148,11 @@
     <button class="alx-button small" id="edit-map">Edit map…</button>
     <button class="alx-button" id="cancel-btn">Cancel</button>
     <button class="alx-button primary" id="apply-btn">Apply</button>
+  </div>
+
+  <div class="legendbar">
+    <div class="legend-chips" id="legend-chips"></div>
+    <span class="legend-status" id="legend-status"></span>
   </div>
 
   <div class="stage">
@@ -561,7 +585,7 @@
     function requestDraw() {
       if (drawPending) return;
       drawPending = true;
-      requestAnimationFrame(() => { drawPending = false; draw(); });
+      requestAnimationFrame(() => { drawPending = false; draw(); renderStatus(); });
     }
 
     function draw() {
@@ -1244,8 +1268,7 @@
           reArt(keysInRange(s, eb), currentArt);
         } else if (drag.hitSpan) {
           // click (no drag) on a span: adopt its articulation as current
-          currentArt = drag.hitSpan.art;
-          artSelect.value = currentArt;
+          setCurrentArt(drag.hitSpan.art);
         }
         previewPaint = null;
       } else if (drag.mode === "marquee") {
@@ -1487,7 +1510,7 @@
     }
     // currentArt only affects NEW notes (and the paint/selector brushes) —
     // changing it never retroactively re-articulates existing notes.
-    artSelect.addEventListener("change", () => { currentArt = artSelect.value; });
+    artSelect.addEventListener("change", () => setCurrentArt(artSelect.value));
     snapSelect.addEventListener("change", () => { snap = parseFloat(snapSelect.value); });
     document.getElementById("zoom-in").onclick = () => { pxPerBeat = Math.min(MAX_PPB, pxPerBeat * 1.25); clampScroll(); requestDraw(); };
     document.getElementById("zoom-out").onclick = () => { pxPerBeat = Math.max(MIN_PPB, pxPerBeat / 1.25); clampScroll(); requestDraw(); };
@@ -1580,9 +1603,59 @@
       }
     }
 
+    // ---- Legend + status bar (Wave C) ----
+    // currentArt only affects NEW notes/brushes — route every write through here
+    // so the dropdown, legend highlight, and status line stay in sync.
+    function setCurrentArt(name) {
+      currentArt = name;
+      if (artSelect && name != null) artSelect.value = name;
+      renderLegend();
+    }
+    const GRID_LABELS = { "4": "1/1", "2": "1/2", "1": "1/4", "0.5": "1/8", "0.25": "1/16", "0.125": "1/32", "0": "Off" };
+    const gridLabel = () => GRID_LABELS[String(snap)] ?? String(snap);
+
+    function renderLegend() {
+      const host = document.getElementById("legend-chips");
+      if (!host) return;
+      host.innerHTML = "";
+      if (!artMap.length) {
+        const e = document.createElement("span");
+        e.className = "legend-empty";
+        e.textContent = "No articulations — Edit map… to add some";
+        host.appendChild(e);
+        return;
+      }
+      artMap.forEach((a, i) => {
+        const chip = document.createElement("div");
+        chip.className = "legend-chip" + (a.name === currentArt ? " current" : "");
+        chip.title = "Select all “" + a.name + "” notes (key " + (i + 1) + ")";
+        const num = document.createElement("span"); num.className = "num"; num.textContent = String(i + 1);
+        const sw = document.createElement("span"); sw.className = "swatch"; sw.style.background = artColor(a.name);
+        const nm = document.createElement("span"); nm.textContent = a.name;
+        chip.append(num, sw, nm);
+        // keep canvas focus (don't steal it on mousedown), select-by-art on click
+        chip.addEventListener("mousedown", ev => ev.preventDefault());
+        chip.addEventListener("click", () => {
+          selection = new Set(notes.filter(n => n.art === a.name).map(n => n._key));
+          setCurrentArt(a.name);
+          requestDraw();
+        });
+        host.appendChild(chip);
+      });
+    }
+
+    let lastStatus = "";
+    function renderStatus() {
+      const el = document.getElementById("legend-status");
+      if (!el) return;
+      const s = selection.size + " selected · grid " + gridLabel() + " · art: " + (currentArt ?? "—");
+      if (s !== lastStatus) { el.textContent = s; lastStatus = s; }
+    }
+
     // ---- Init ----
     function init() {
       fillArtSelect();
+      renderLegend();
       snapSelect.value = String(snap);
       setTool("mouse");
       resize();
