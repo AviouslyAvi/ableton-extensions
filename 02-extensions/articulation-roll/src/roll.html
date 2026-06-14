@@ -218,6 +218,7 @@
       return { ksPitch: a ? a.pitch : -1, ksHold: a && a.hold ? durMs : PV_KS_TAP_MS };
     }
     function previewNote(n) {
+      if (!n || n.muted) return; // deactivated notes are silent
       const { ksPitch, ksHold } = pvKsFor(n, PV_DUR_MS);
       const vel = typeof n.velocity === "number" ? n.velocity : 100;
       pvSend(n.pitch, vel, PV_DUR_MS, ksPitch, ksHold);
@@ -321,7 +322,7 @@
       // Software fallback: sequence the clip's own notes out the bridge.
       syncMode = false;
       const upcoming = notes
-        .filter(n => n.startTime >= fromBeat - 1e-6)
+        .filter(n => !n.muted && n.startTime >= fromBeat - 1e-6)
         .sort((a, b) => a.startTime - b.startTime);
       for (const n of upcoming) {
         const delayMs = (n.startTime - fromBeat) * SEC_PER_BEAT * 1000;
@@ -372,6 +373,7 @@
       pitch: n.pitch, startTime: n.startTime, duration: n.duration,
       velocity: (typeof n.velocity === "number" ? n.velocity : 100),
       art: (typeof n.art === "string" ? n.art : null),
+      muted: n.muted === true, // deactivated (Ableton parity): kept, silent, no keyswitch
     }));
 
     let selection = new Set();             // selected note _keys
@@ -391,6 +393,7 @@
       undoStack.push(s);
       if (undoStack.length > UNDO_MAX) undoStack.shift();
       redoStack.length = 0;
+      scheduleLiveApply(); // every committed edit drives the live clip write
     }
     function pushUndo() { pushUndoState(snapState()); }
     function restoreState(s) {
@@ -398,6 +401,43 @@
       marker = s.marker;
       selection = new Set([...selection].filter(k => notes.some(n => n._key === k)));
       requestDraw();
+      scheduleLiveApply(); // in-editor undo/redo also follows through to the clip
+    }
+
+    // ---- Live preview: write the clip mid-modal (no close) ----
+    // POST the full notes array to the host's /apply; the host writes clip.notes
+    // in a transaction so Live plays the REAL keyswitches in transport context
+    // as you edit. Debounced so rapid edits coalesce into fewer Live undo steps;
+    // the editor keeps its own fine-grained undo above. Fire-and-forget — if the
+    // bridge/host is absent it just no-ops (same failure mode as preview notes).
+    function serializeNotes() {
+      return notes.map(n => {
+        const o = {
+          pitch: n.pitch, startTime: n.startTime, duration: n.duration,
+          velocity: n.velocity, art: n.art ?? null, muted: n.muted === true,
+        };
+        if (typeof n.id === "number") o.id = n.id;
+        return o;
+      });
+    }
+    function liveApply() {
+      try {
+        fetch("http://127.0.0.1:" + PV_PORT + "/apply", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ notes: serializeNotes() }),
+          keepalive: true, // let the final flush survive modal teardown on cancel
+        }).catch(() => {});
+      } catch (_) { /* bridge absent */ }
+    }
+    let liveApplyTimer = 0;
+    function scheduleLiveApply() {
+      if (liveApplyTimer) clearTimeout(liveApplyTimer);
+      liveApplyTimer = setTimeout(liveApply, 200);
+    }
+    function flushLiveApply() {
+      if (liveApplyTimer) { clearTimeout(liveApplyTimer); liveApplyTimer = 0; }
+      liveApply();
     }
     function doUndo() {
       if (!undoStack.length) return;
@@ -416,7 +456,9 @@
     // the host's keyswitchesFromNotes so the lane previews exactly what Apply
     // writes. Span end = next span's start, else the run's furthest note-end.
     function laneSpans() {
-      const sorted = [...notes].sort((a, b) => (a.startTime - b.startTime) || (a.pitch - b.pitch));
+      // Muted notes are transparent to keyswitch derivation (excluded, not run-breaking),
+      // mirroring the host's keyswitchesFromNotes.
+      const sorted = [...notes].filter(n => !n.muted).sort((a, b) => (a.startTime - b.startTime) || (a.pitch - b.pitch));
       const spans = [];
       let run = null;
       for (const n of sorted) {
@@ -563,13 +605,17 @@
         if (x + w < gx0 || x > gx0 + gw || y + ROW_H < gy0 || y > gy0 + gh) continue;
         const selected = selection.has(n._key);
         const a = 0.35 + 0.6 * Math.min(1, (n.velocity || 100) / 127);
-        // Notes are tinted by their articulation (FL "Articulate"-style colors);
+        // Deactivated (muted) notes render as a faint grey shell — kept on the
+        // grid but visibly inert; they don't play and emit no keyswitch.
+        // Otherwise notes are tinted by articulation (FL "Articulate"-style),
         // un-articulated notes keep the accent color. Selection = accent outline.
-        ctx.fillStyle = n.art
+        ctx.fillStyle = n.muted
+          ? `oklch(from ${cssVar("--c-text-secondary")} l c h / ${selected ? 0.35 : 0.18})`
+          : n.art
           ? artColor(n.art, selected ? 1 : a)
           : (selected ? accent : `oklch(from ${accent} l c h / ${a})`);
         ctx.fillRect(x, y + 1, w, ROW_H - 2);
-        ctx.strokeStyle = selected ? accent : border;
+        ctx.strokeStyle = selected ? accent : (n.muted ? cssVar("--c-text-secondary") : border);
         ctx.lineWidth = selected ? 2 : 1;
         ctx.strokeRect(Math.round(x) + 0.5, Math.round(y + 1) + 0.5, Math.round(w) - 1, ROW_H - 3);
         ctx.lineWidth = 1;
@@ -1162,6 +1208,26 @@
         requestDraw();
         return;
       }
+      // Bare 1-9: assign selected notes to articulation N (artMap[N-1]). Cmd/Ctrl+1/2
+      // is grid stepping (handled above, cmd-guarded), so these never collide.
+      if (!cmd && e.key >= "1" && e.key <= "9") {
+        e.preventDefault();
+        const a = artMap[+e.key - 1];
+        if (a && selection.size) reArt([...selection], a.name); // reArt re-previews + pushes undo
+        return;
+      }
+      // Bare 0: toggle deactivate (mute) on selected notes — Ableton parity.
+      if (!cmd && e.key === "0") {
+        e.preventDefault();
+        if (!selection.size) return;
+        const pre = snapState();
+        // If any selected note is active, deactivate all; else reactivate all.
+        const anyActive = notes.some(n => selection.has(n._key) && !n.muted);
+        for (const n of notes) if (selection.has(n._key)) n.muted = anyActive;
+        pushUndoState(pre);
+        requestDraw();
+        return;
+      }
       if (cmd && k === "e") {
         // one-shot: split the selected notes at the insert marker (snapped)
         e.preventDefault();
@@ -1184,6 +1250,7 @@
       if (e.key === "Escape") {
         if (ctxMenu.style.display === "block") { hideCtxMenu(); return; }
         if (playing) { stopPlayback(); return; }
+        flushLiveApply(); // keep writes; flush the last edit before closing
         closeWith({ type: "cancel" });
         return;
       }
@@ -1308,20 +1375,12 @@
 
     document.getElementById("play-btn").onclick = togglePlayback;
 
-    document.getElementById("cancel-btn").onclick = () => { stopPlayback(); closeWith({ type: "cancel" }); };
+    // Cancel = close, KEEP live-applied writes (undo them via Live's own Cmd+Z).
+    // Flush so the last edit within the debounce window isn't lost.
+    document.getElementById("cancel-btn").onclick = () => { stopPlayback(); flushLiveApply(); closeWith({ type: "cancel" }); };
     document.getElementById("apply-btn").onclick = () => {
       stopPlayback();
-      closeWith({
-        type: "apply",
-        notes: notes.map(n => {
-          const o = {
-            pitch: n.pitch, startTime: n.startTime, duration: n.duration,
-            velocity: n.velocity, art: n.art ?? null,
-          };
-          if (typeof n.id === "number") o.id = n.id;
-          return o;
-        }),
-      });
+      closeWith({ type: "apply", notes: serializeNotes() });
     };
 
     // ---- Map editor ----
