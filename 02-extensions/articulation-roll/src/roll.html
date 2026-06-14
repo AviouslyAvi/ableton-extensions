@@ -1486,7 +1486,10 @@
       requestDraw();
     });
 
-    // wheel: vertical scroll; shift = horizontal; ctrl/cmd = zoom (about cursor)
+    // Wheel (Ableton parity): plain = vertical scroll, Shift = horizontal scroll,
+    // Cmd/Ctrl = horizontal zoom about the cursor (ROW_H fixed — no pitch zoom).
+    // Zoom is sign-based (not delta-magnitude) so it behaves the same whether the
+    // platform reports pixel- or line-mode wheel deltas. Scroll-up/away zooms in.
     canvas.addEventListener("wheel", e => {
       e.preventDefault();
       if (e.ctrlKey || e.metaKey) {
@@ -1497,10 +1500,12 @@
         pxPerBeat = Math.max(MIN_PPB, Math.min(MAX_PPB, pxPerBeat * factor));
         scrollX = beatAt * pxPerBeat - (x - GUTTER);
       } else if (e.shiftKey) {
-        scrollX += e.deltaY;
+        // Horizontal scroll — take whichever axis the device reports (vertical
+        // wheels send deltaY; horizontal wheels / trackpads send deltaX).
+        scrollX += (e.deltaY || e.deltaX);
       } else {
-        scrollY += e.deltaY;
-        scrollX += e.deltaX;
+        scrollY += e.deltaY;   // vertical scroll
+        scrollX += e.deltaX;   // trackpad horizontal component
       }
       clampScroll();
       requestDraw();
