@@ -628,6 +628,7 @@
     function draw() {
       ctx.clearRect(0, 0, viewW, viewH);
       drawGrid();
+      drawLoopRegion();
       drawNotes();
       drawPlayhead();
       drawOverlays();
@@ -649,6 +650,30 @@
       ctx.beginPath(); ctx.rect(GUTTER, RULER, gridW(), gridH()); ctx.clip();
       ctx.strokeStyle = "#7c5"; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(x, RULER); ctx.lineTo(x, RULER + gridH()); ctx.stroke();
+      ctx.restore();
+    }
+
+    // When the clip loops, show where playback wraps: dim everything outside
+    // [LOOP_START, LOOP_END] and draw accent boundary lines. Clip-local beats, so
+    // it lines up with the notes and the playhead (which wraps inside this band).
+    // The matching loop brace in the ruler is drawn by drawRuler().
+    function drawLoopRegion() {
+      if (!LOOPING) return;
+      const gx0 = GUTTER, gy0 = RULER, gh = gridH(), gw = gridW();
+      const xs = beatToX(LOOP_START), xe = beatToX(LOOP_END);
+      ctx.save();
+      ctx.beginPath(); ctx.rect(gx0, gy0, gw, gh); ctx.clip();
+      const dim = "rgba(0,0,0,0.22)";
+      if (xs > gx0) fillRect(gx0, gy0, Math.min(xs, gx0 + gw) - gx0, gh, dim);
+      if (xe < gx0 + gw) fillRect(Math.max(xe, gx0), gy0, gx0 + gw - Math.max(xe, gx0), gh, dim);
+      ctx.strokeStyle = cssVar("--c-highlight--primary");
+      ctx.globalAlpha = 0.8;
+      for (const x of [xs, xe]) {
+        if (x >= gx0 && x <= gx0 + gw) {
+          ctx.beginPath(); ctx.moveTo(Math.round(x) + 0.5, gy0); ctx.lineTo(Math.round(x) + 0.5, gy0 + gh); ctx.stroke();
+        }
+      }
+      ctx.globalAlpha = 1;
       ctx.restore();
     }
 
@@ -790,6 +815,18 @@
       ctx.restore();
       ctx.strokeStyle = cssVar("--c-control-border");
       ctx.beginPath(); ctx.moveTo(GUTTER, RULER + 0.5); ctx.lineTo(GUTTER + gw, RULER + 0.5); ctx.stroke();
+      // Loop brace: an accent bar along the bottom of the ruler spanning the loop
+      // region, with end caps — mirrors the dimmed loop band on the grid below.
+      if (LOOPING) {
+        const xs = Math.max(GUTTER, beatToX(LOOP_START));
+        const xe = Math.min(GUTTER + gw, beatToX(LOOP_END));
+        if (xe > xs) {
+          ctx.fillStyle = cssVar("--c-highlight--primary");
+          ctx.fillRect(xs, RULER - 3, xe - xs, 3);
+          if (beatToX(LOOP_START) >= GUTTER) ctx.fillRect(xs, RULER - 7, 2, 7);
+          if (beatToX(LOOP_END) <= GUTTER + gw) ctx.fillRect(xe - 2, RULER - 7, 2, 7);
+        }
+      }
     }
 
     function drawLane() {

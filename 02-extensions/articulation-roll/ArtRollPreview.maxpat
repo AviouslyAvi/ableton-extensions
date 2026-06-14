@@ -20,7 +20,7 @@
                     "numoutlets": 0,
                     "patching_rect": [ 23.0, 10.0, 1080.0, 48.0 ],
                     "presentation_linecount": 3,
-                    "text": "ArtRoll Preview — bridges the Articulation Roll editor to this track. (1) OSC /artroll/note <pitch> <vel> <durMs> <ksPitch> <ksHoldMs> on UDP 7474 injects click/preview notes. (2) /artroll/play <songTimeMs> and /artroll/stop drive Live's REAL transport (set current_song_time + start/stop_playing on live_set), so the editor's Play hears the whole arrangement in sync. (3) A metro polls current_song_time + is_playing and sends /artroll/pos <songTimeMs> <isPlaying> back on UDP 7476 so the editor playhead follows Live. midiin->midiout passes the track's own MIDI through (without it the device would swallow all MIDI and the track would go silent). Put this device on the edited track, BEFORE the instrument. ksPitch -1 = no keyswitch."
+                    "text": "ArtRoll Preview — bridges the Articulation Roll editor to this track. (1) OSC /artroll/note <pitch> <vel> <durMs> <ksPitch> <ksHoldMs> on UDP 7474 injects click/preview notes. (2) /artroll/play <songTimeMs> and /artroll/stop drive Live's REAL transport: set current_song_time to the locate, then (after a 30ms delay so Live commits the move) call start_playing on live_set — without the delay Live starts from its old position and ignores the locate. So the editor's Play hears the whole arrangement in sync, FROM the clicked position. (3) A metro polls current_song_time + is_playing and sends /artroll/pos <songTimeMs> <isPlaying> back on UDP 7476 so the editor playhead follows Live. midiin->midiout passes the track's own MIDI through (without it the device would swallow all MIDI and the track would go silent). Put this device on the edited track, BEFORE the instrument. ksPitch -1 = no keyswitch."
                 }
             },
             {
@@ -206,6 +206,17 @@
                     "outlettype": [ "" ],
                     "patching_rect": [ 470.0, 212.0, 170.0, 22.0 ],
                     "text": "prepend set current_song_time"
+                }
+            },
+            {
+                "box": {
+                    "id": "obj-playdelay",
+                    "maxclass": "newobj",
+                    "numinlets": 2,
+                    "numoutlets": 1,
+                    "outlettype": [ "bang" ],
+                    "patching_rect": [ 410.0, 195.0, 60.0, 22.0 ],
+                    "text": "delay 30"
                 }
             },
             {
@@ -493,8 +504,14 @@
             },
             {
                 "patchline": {
-                    "destination": [ "obj-startmsg", 0 ],
+                    "destination": [ "obj-playdelay", 0 ],
                     "source": [ "obj-play-t", 0 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-startmsg", 0 ],
+                    "source": [ "obj-playdelay", 0 ]
                 }
             },
             {
