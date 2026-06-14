@@ -71,6 +71,25 @@
     .alx-button.tool.active, .alx-button.toggled { background-color: var(--c-highlight--primary); color: var(--c-control-on-foreground); }
     .swatch { width: 12px; height: 12px; border-radius: 2px; display: inline-block; vertical-align: -1px; }
 
+    /* Articulation legend + status bar */
+    .legendbar {
+      display: flex; align-items: center; gap: 0.5em;
+      padding: 0.3em 0.6em; flex: 0 0 auto;
+      border-bottom: 1px solid var(--c-control-border);
+    }
+    .legend-chips { display: flex; align-items: center; gap: 0.4em; overflow: hidden; flex: 1 1 auto; }
+    .legend-chip {
+      display: inline-flex; align-items: center; gap: 0.35em;
+      height: 18px; padding: 0 0.55em; border-radius: 1em;
+      background: var(--c-control-bg--500); border: 1px solid var(--c-control-border);
+      cursor: pointer; user-select: none; white-space: nowrap; color: var(--c-text-primary);
+    }
+    .legend-chip:hover { background: var(--c-control-bg--400); }
+    .legend-chip.current { outline: 1px solid var(--c-highlight--primary); outline-offset: -1px; }
+    .legend-chip .num { color: var(--c-text-secondary); font-variant-numeric: tabular-nums; }
+    .legend-status { color: var(--c-text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; flex: 0 0 auto; }
+    .legend-empty { color: var(--c-text-secondary); }
+
     /* Right-click context menu */
     .ctx-menu {
       position: absolute; display: none; z-index: 10; min-width: 140px;
@@ -114,6 +133,7 @@
     <label>Articulation</label>
     <select class="alx-input" id="art-select"></select>
     <button class="alx-button small" id="selector-toggle" title="Articulation Selector Mode: clicking a note converts it to the current articulation.">Art. select: off</button>
+    <button class="alx-button small" id="scale-toggle" title="Snap to Scale: placed, transposed and dragged notes snap to Live's current scale.">Scale: off</button>
     <label>Snap</label>
     <select class="alx-input" id="snap-select">
       <option value="4">1/1</option>
@@ -129,6 +149,11 @@
     <button class="alx-button small" id="edit-map">Edit map…</button>
     <button class="alx-button" id="cancel-btn">Cancel</button>
     <button class="alx-button primary" id="apply-btn">Apply</button>
+  </div>
+
+  <div class="legendbar">
+    <div class="legend-chips" id="legend-chips"></div>
+    <span class="legend-status" id="legend-status"></span>
   </div>
 
   <div class="stage">
@@ -245,6 +270,13 @@
     // Clip's arrangement start (beats). Live reports global song time; subtract
     // this to place the playhead in clip-local coordinates.
     const CLIP_START = (DATA.clip && typeof DATA.clip.startTime === "number") ? DATA.clip.startTime : 0;
+    // Loop region (clip-local beats). Host sends the clip's loop; fall back to the
+    // whole clip if it's absent or degenerate. LOOPING mirrors the clip's toggle.
+    const LOOPING = !!(DATA.clip && DATA.clip.looping);
+    let LOOP_START = (DATA.clip && typeof DATA.clip.loopStart === "number") ? DATA.clip.loopStart : 0;
+    let LOOP_END = (DATA.clip && typeof DATA.clip.loopEnd === "number") ? DATA.clip.loopEnd : clipDuration;
+    if (!(LOOP_END > LOOP_START)) { LOOP_START = 0; LOOP_END = clipDuration; }
+    const playEnd = () => LOOPING ? LOOP_END : clipDuration;
     let playing = false;
     let syncMode = false;    // true => playhead driven by Live's reported time
     let playTimers = [];
@@ -295,14 +327,57 @@
       updatePlayBtn();
       requestDraw();
     }
+    // Keep the playhead on screen during playback: if it leaves the grid view,
+    // page scrollX so it sits a little in from the left edge.
+    function followPlayhead(beat) {
+      const x = beatToX(beat);
+      if (x < GUTTER || x > GUTTER + gridW()) {
+        scrollX = Math.max(0, beat * pxPerBeat - 24);
+        clampScroll();
+      }
+    }
     function playLoop() {
+      const b = playheadBeat();
+      if (b != null) followPlayhead(b);
       requestDraw();
       if (playing) playRAF = requestAnimationFrame(playLoop);
+    }
+    // Schedule one playback window [fromBeat, playEnd()) out the bridge. At the
+    // window end, loop back to LOOP_START (if LOOPING) or stop. Notes whose tail
+    // crosses the window end are clamped so they don't ring past the loop point.
+    function scheduleSoftwareWindow(fromBeat) {
+      const end = playEnd();
+      const upcoming = notes
+        .filter(n => !n.muted && n.startTime >= fromBeat - 1e-6 && n.startTime < end - 1e-6)
+        .sort((a, b) => a.startTime - b.startTime);
+      for (const n of upcoming) {
+        const delayMs = (n.startTime - fromBeat) * SEC_PER_BEAT * 1000;
+        const playableBeats = Math.min(n.duration, end - n.startTime); // clamp at window end
+        const durMs = Math.max(20, playableBeats * SEC_PER_BEAT * 1000);
+        const vel = typeof n.velocity === "number" ? n.velocity : 100;
+        const { ksPitch, ksHold } = pvKsFor(n, durMs);
+        playTimers.push(setTimeout(() => pvSend(n.pitch, vel, durMs, ksPitch, ksHold), delayMs));
+      }
+      // at window end: loop (restart at LOOP_START) or stop, a hair late
+      const spanMs = (end - fromBeat) * SEC_PER_BEAT * 1000;
+      playTimers.push(setTimeout(() => {
+        if (!playing) return;
+        if (LOOPING) {
+          playStartBeat = LOOP_START;
+          playStartMs = performance.now();
+          playTimers = [];                 // this window's timers have all fired
+          scheduleSoftwareWindow(LOOP_START);
+        } else {
+          stopPlayback();
+        }
+      }, spanMs + 60));
     }
     function startPlayback(fromBeat) {
       stopPlayback();
       fromBeat = Math.max(0, fromBeat || 0);
       if (fromBeat >= clipDuration) fromBeat = 0;
+      // When looping, a play-from outside the loop region snaps to the loop start.
+      if (LOOPING && (fromBeat < LOOP_START || fromBeat >= LOOP_END)) fromBeat = LOOP_START;
       playing = true;
       playStartBeat = fromBeat;
       playStartMs = performance.now();
@@ -310,7 +385,7 @@
       if (syncAvail()) {
         // Synced: start Live's real transport at this clip's position. Live plays
         // the actual notes (and the rest of the arrangement) — don't double them
-        // out the bridge.
+        // out the bridge. Live loops the clip natively, so no software window.
         syncMode = true;
         syncBeat = fromBeat;
         pvCmd("play " + Math.round((CLIP_START + fromBeat) * 1000));
@@ -321,18 +396,7 @@
 
       // Software fallback: sequence the clip's own notes out the bridge.
       syncMode = false;
-      const upcoming = notes
-        .filter(n => !n.muted && n.startTime >= fromBeat - 1e-6)
-        .sort((a, b) => a.startTime - b.startTime);
-      for (const n of upcoming) {
-        const delayMs = (n.startTime - fromBeat) * SEC_PER_BEAT * 1000;
-        const durMs = Math.max(20, n.duration * SEC_PER_BEAT * 1000);
-        const vel = typeof n.velocity === "number" ? n.velocity : 100;
-        const { ksPitch, ksHold } = pvKsFor(n, durMs);
-        playTimers.push(setTimeout(() => pvSend(n.pitch, vel, durMs, ksPitch, ksHold), delayMs));
-      }
-      // stop a hair after the clip end
-      playTimers.push(setTimeout(stopPlayback, (clipDuration - fromBeat) * SEC_PER_BEAT * 1000 + 60));
+      scheduleSoftwareWindow(fromBeat);
       updatePlayBtn();
       playLoop();
     }
@@ -354,6 +418,8 @@
     const ROW_H = 12, MIN_PPB = 8, MAX_PPB = 400;
     const BEATS_PER_BAR = 4;           // display default (4/4)
     const EDGE = 6;                    // px hot-zone for the resize handle
+    const VEL_LANE = 56;               // velocity lane height (px), between grid and artic lane
+    const BOTTOM = () => LANE + VEL_LANE; // bottom chrome below the grid (vel + artic lanes)
 
     // ---- State ----
     const clipDuration = Math.max(0.25, DATA.clip.duration || 4);
@@ -361,6 +427,32 @@
     let snap = DATA.grid && DATA.grid.snap != null ? DATA.grid.snap : 0.25;
     let lastLength = DATA.grid && DATA.grid.default ? DATA.grid.default : 0.25;
     let currentArt = artMap.length ? artMap[0].name : null;
+
+    // Live's current scale, for the optional snap-to-scale toggle. SCALE.set is
+    // the set of in-scale pitch classes (root + each interval, mod 12), so any
+    // MIDI pitch's membership is `SCALE.set.has(pitch % 12)`. null = unavailable
+    // (host couldn't read the song, or no intervals) -> snapping is a no-op.
+    const SCALE = (() => {
+      const sc = DATA.scale;
+      if (!sc || !Array.isArray(sc.intervals) || !sc.intervals.length) return null;
+      const root = ((Number(sc.root) % 12) + 12) % 12;
+      const set = new Set(sc.intervals.map(i => (((root + Number(i)) % 12) + 12) % 12));
+      if (!set.size) return null;
+      return { root, set, name: typeof sc.name === "string" ? sc.name : "" };
+    })();
+    let scaleOn = false;                    // snap-to-scale toggle (default off)
+
+    // Nearest in-scale pitch: search outward from p (down before up at each step),
+    // clamped 0..127. Off / no scale -> identity.
+    function snapPitchToScale(p) {
+      if (!scaleOn || !SCALE) return p;
+      for (let d = 0; d <= 12; d++) {
+        const lo = p - d, hi = p + d;
+        if (lo >= 0 && SCALE.set.has(((lo % 12) + 12) % 12)) return lo;
+        if (hi <= 127 && SCALE.set.has(((hi % 12) + 12) % 12)) return hi;
+      }
+      return p;
+    }
 
     let keyCounter = 1;
     // Melodic notes — keep host-sent fields; `id` (if present) ties back to an
@@ -493,7 +585,7 @@
     }
 
     const gridW = () => Math.max(10, viewW - GUTTER);
-    const gridH = () => Math.max(10, viewH - RULER - LANE);
+    const gridH = () => Math.max(10, viewH - RULER - BOTTOM());
     const contentH = () => 128 * ROW_H;
     const contentW = () => clipDuration * pxPerBeat;
 
@@ -510,6 +602,14 @@
     const snapBeat = b => snap > 0 ? Math.round(b / snap) * snap : b;
     const clampBeat = b => Math.max(0, Math.min(b, clipDuration));
 
+    // ---- Velocity lane geometry (Wave D) ----
+    const VEL_PAD = 6;
+    const velBaseline = () => viewH - LANE - VEL_PAD;          // stems sit on this line
+    const velTopY = () => viewH - BOTTOM() + VEL_PAD;          // top of the tallest stem
+    const velUsableH = () => Math.max(8, velBaseline() - velTopY());
+    const velToY = v => velBaseline() - (Math.max(1, Math.min(127, v)) / 127) * velUsableH();
+    const yToVel = y => Math.max(1, Math.min(127, Math.round((velBaseline() - y) / velUsableH() * 127)));
+
     // ---- Articulation colors ----
     function artColor(name, alpha) {
       const i = Math.max(0, artMap.findIndex(a => a.name === name));
@@ -522,7 +622,7 @@
     function requestDraw() {
       if (drawPending) return;
       drawPending = true;
-      requestAnimationFrame(() => { drawPending = false; draw(); });
+      requestAnimationFrame(() => { drawPending = false; draw(); renderStatus(); });
     }
 
     function draw() {
@@ -533,6 +633,7 @@
       drawOverlays();
       drawKeyboard();
       drawRuler();
+      drawVelLane();
       drawLane();
       // top-left corner cap
       ctx.fillStyle = "var(--c-bg--0500)";
@@ -729,6 +830,43 @@
       ctx.restore();
     }
 
+    // Velocity lane: a stem + head per non-muted note, height ∝ velocity.
+    function drawVelLane() {
+      const gw = gridW(), top = viewH - BOTTOM();
+      fillRect(0, top, viewW, VEL_LANE, cssVar("--c-control-bg--500"));
+      ctx.strokeStyle = cssVar("--c-control-border");
+      ctx.beginPath(); ctx.moveTo(0, top + 0.5); ctx.lineTo(viewW, top + 0.5); ctx.stroke();
+      // label gutter
+      ctx.fillStyle = cssVar("--c-text-secondary");
+      ctx.font = "9px sans-serif"; ctx.textBaseline = "middle"; ctx.textAlign = "right";
+      ctx.fillText("Vel.", GUTTER - 3, top + VEL_LANE / 2);
+
+      ctx.save();
+      ctx.beginPath(); ctx.rect(GUTTER, top, gw, VEL_LANE); ctx.clip();
+      const base = velBaseline();
+      const accent = cssVar("--c-highlight--primary");
+      // faint baseline
+      ctx.strokeStyle = cssVar("--c-control-border");
+      ctx.globalAlpha = 0.6;
+      ctx.beginPath(); ctx.moveTo(GUTTER, Math.round(base) + 0.5); ctx.lineTo(GUTTER + gw, Math.round(base) + 0.5); ctx.stroke();
+      ctx.globalAlpha = 1;
+      for (const n of notes) {
+        if (n.muted) continue;
+        const x = beatToX(n.startTime);
+        if (x < GUTTER - 2 || x > GUTTER + gw + 2) continue;
+        const y = velToY(n.velocity || 100);
+        const selected = selection.has(n._key);
+        const col = selected ? accent : (n.art ? artColor(n.art, 0.85) : accent);
+        const px = Math.round(x) + 0.5;
+        ctx.strokeStyle = col; ctx.lineWidth = selected ? 2 : 1;
+        ctx.beginPath(); ctx.moveTo(px, base); ctx.lineTo(px, y); ctx.stroke();
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.arc(px, y, selected ? 3 : 2.2, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.lineWidth = 1;
+      ctx.restore();
+    }
+
     // ---- Hit testing ----
     function noteAt(x, y) {
       for (let i = notes.length - 1; i >= 0; i--) {
@@ -754,12 +892,28 @@
     const keysInRange = (s, e) =>
       notes.filter(n => n.startTime >= s && n.startTime < e).map(n => n._key);
 
-    const inGrid = (x, y) => x >= GUTTER && y >= RULER && y <= viewH - LANE;
+    // Velocity-lane hit testing: bars live at each note's startTime x.
+    function velNotesNearX(px, tol) {
+      tol = tol == null ? 5 : tol;
+      return notes.filter(n => !n.muted && Math.abs(beatToX(n.startTime) - px) <= tol);
+    }
+    function velNoteAt(px) {
+      let best = null, bd = 1e9;
+      for (const n of notes) {
+        if (n.muted) continue;
+        const d = Math.abs(beatToX(n.startTime) - px);
+        if (d < bd && d <= 5) { bd = d; best = n; }
+      }
+      return best;
+    }
+
+    const inGrid = (x, y) => x >= GUTTER && y >= RULER && y <= viewH - BOTTOM();
+    const inVelLane = (x, y) => x >= GUTTER && y > viewH - BOTTOM() && y < viewH - LANE;
     const inLane = (x, y) => x >= GUTTER && y >= viewH - LANE;
 
     // ---- Note helpers ----
     function placeNote(x, y) {
-      const pitch = Math.max(0, Math.min(127, yToPitch(y)));
+      const pitch = snapPitchToScale(Math.max(0, Math.min(127, yToPitch(y))));
       const start = clampBeat(snapBeat(xToBeat(x)));
       const n = {
         _key: keyCounter++, id: undefined, pitch, startTime: start,
@@ -802,6 +956,120 @@
       if (any) { pushUndoState(pre); previewNote(first); requestDraw(); }
     }
 
+    // ---- Clipboard + keyboard editing (Wave A) ----
+    let clipboard = []; // internal copy buffer: {pitch, rel, duration, velocity, art, muted}
+    let clipSpan = 0;   // span (beats) of the copied block, for duplicate-after paste
+    let pasteAt = 0;    // default paste beat when there's no locator (tiles forward)
+
+    // Clamp a paste/duplicate start so the note stays inside the clip (mirrors placeNote).
+    function fitStart(start, dur) {
+      let s = clampBeat(start);
+      if (s + dur > clipDuration) s = Math.max(0, clipDuration - dur);
+      return s;
+    }
+
+    function copySelection() {
+      if (!selection.size) return;
+      const sel = notes.filter(n => selection.has(n._key));
+      const minStart = Math.min(...sel.map(n => n.startTime));
+      const maxEnd = Math.max(...sel.map(n => n.startTime + n.duration));
+      clipSpan = maxEnd - minStart;
+      pasteAt = minStart + clipSpan;   // default paste lands right after the source (like Cmd+D)
+      clipboard = sel.map(n => ({
+        pitch: n.pitch, rel: n.startTime - minStart, duration: n.duration,
+        velocity: n.velocity, art: n.art, muted: n.muted === true,
+      }));
+    }
+
+    function pasteClipboard(atBeat) {
+      if (!clipboard.length) return;
+      const pre = snapState();
+      const base = clampBeat(snapBeat(atBeat));
+      const made = clipboard.map(c => ({
+        _key: keyCounter++, id: undefined, pitch: c.pitch,
+        startTime: fitStart(base + c.rel, c.duration), duration: c.duration,
+        velocity: c.velocity, art: c.art, muted: c.muted,
+      }));
+      notes.push(...made);
+      selection = new Set(made.map(n => n._key));
+      pasteAt = base + clipSpan;   // tile the next no-locator paste forward by one span
+      pushUndoState(pre);
+      requestDraw();
+    }
+
+    function duplicateSelection() {
+      if (!selection.size) return;
+      const sel = notes.filter(n => selection.has(n._key));
+      const minStart = Math.min(...sel.map(n => n.startTime));
+      const maxEnd = Math.max(...sel.map(n => n.startTime + n.duration));
+      const span = maxEnd - minStart;            // Ableton "duplicate after"
+      const pre = snapState();
+      const made = sel.map(n => ({
+        _key: keyCounter++, id: undefined, pitch: n.pitch,
+        startTime: fitStart(n.startTime + span, n.duration), duration: n.duration,
+        velocity: n.velocity, art: n.art, muted: n.muted === true,
+      }));
+      notes.push(...made);
+      selection = new Set(made.map(n => n._key));
+      pushUndoState(pre);
+      requestDraw();
+    }
+
+    // ←/→ : shift selection by one grid step, group-clamped to [0, clipDuration].
+    function nudgeSelection(dir) {
+      if (!selection.size) return;
+      const step = snap > 0 ? snap : 0.25;
+      const sel = notes.filter(n => selection.has(n._key));
+      let delta = dir * step;
+      if (delta < 0) delta = Math.max(delta, -Math.min(...sel.map(n => n.startTime)));
+      else delta = Math.min(delta, clipDuration - Math.max(...sel.map(n => n.startTime + n.duration)));
+      if (Math.abs(delta) < 1e-9) return;
+      const pre = snapState();
+      for (const n of sel) n.startTime += delta;
+      pushUndoState(pre);
+      requestDraw();
+    }
+
+    // ↑/↓ : transpose selection, group-clamped to 0..127. Shift = ±octave.
+    function transposeSelection(semis) {
+      if (!selection.size) return;
+      const sel = notes.filter(n => selection.has(n._key));
+      let d = semis;
+      if (d < 0) d = Math.max(d, -Math.min(...sel.map(n => n.pitch)));
+      else d = Math.min(d, 127 - Math.max(...sel.map(n => n.pitch)));
+      if (d === 0) return;
+      const pre = snapState();
+      for (const n of sel) n.pitch = snapPitchToScale(n.pitch + d);
+      pushUndoState(pre);
+      previewNote(sel[0]);
+      requestDraw();
+    }
+
+    // Legato / length-to-next: stretch each note's duration to the start of the
+    // next note in time (any pitch — connects a melodic line end-to-end); if none
+    // follows, extend to playEnd(). Floors at 1/32 so a note never collapses.
+    // Operates on the given keys.
+    function legatoKeys(keys) {
+      const set = new Set(keys);
+      const sel = notes.filter(n => set.has(n._key));
+      if (!sel.length) return;
+      const pre = snapState();
+      let changed = false;
+      for (const n of sel) {
+        let nextStart = playEnd();
+        for (const m of notes) {
+          if (m === n) continue;
+          if (m.startTime > n.startTime + 1e-6 && m.startTime < nextStart) {
+            nextStart = m.startTime;
+          }
+        }
+        const dur = Math.max(0.03125, nextStart - n.startTime);
+        if (Math.abs(dur - n.duration) > 1e-6) { n.duration = dur; changed = true; }
+      }
+      if (changed) { pushUndoState(pre); requestDraw(); }
+    }
+    function legatoSelection() { if (selection.size) legatoKeys([...selection]); }
+
     // ---- Interaction ----
     let drag = null; // { mode, ... }
     let lastClick = { t: 0, x: -99, y: -99 }; // manual double-press detection
@@ -815,6 +1083,14 @@
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left, y = e.clientY - rect.top;
       hideCtxMenu();
+      // Ruler click = set the play-from locator (tool-independent). `marker`
+      // already drives togglePlayback and renders as a vertical line.
+      if (e.button === 0 && y < RULER && x >= GUTTER) {
+        marker = clampBeat(snapBeat(xToBeat(x)));
+        requestDraw();
+        return;
+      }
+      if (e.button === 0 && inVelLane(x, y)) return onVelDown(e, x, y);
       if (inLane(x, y)) return onLaneDown(e, x, y);
       if (!inGrid(x, y)) return;
       if (e.button === 2) return onRightDown(e, x, y);
@@ -836,6 +1112,66 @@
       const beat = clampBeat(snapBeat(rawBeat));
       drag = { mode: "paint", start: beat, end: beat, moved: false, hitSpan: span };
       requestDraw();
+    }
+
+    // Velocity-lane drag. Three modes decided at press:
+    //  • ramp (Shift)        — straight line press→cursor; crossed notes take the
+    //                          interpolated velocity at their x.
+    //  • proportional        — anchor is part of a multi-selection: scale every
+    //                          selected note by target/anchorOrig (keeps dynamics).
+    //  • freehand (default)  — sweep: each bar the cursor crosses takes the
+    //                          cursor's velocity.
+    function onVelDown(e, x, y) {
+      const anchor = velNoteAt(x);
+      let velMode;
+      if (e.shiftKey) velMode = "ramp";
+      else if (anchor && selection.has(anchor._key) && selection.size > 1) velMode = "proportional";
+      else velMode = "freehand";
+      drag = {
+        mode: "velocity", velMode,
+        pre: snapState(),
+        orig: new Map(notes.map(n => [n._key, n.velocity || 100])), // for deterministic modes
+        anchor: anchor || null,
+        anchorOrig: anchor ? (anchor.velocity || 100) : 100,
+        startX: x, startY: y, changed: false,
+      };
+      applyVelDrag(x, y);
+      requestDraw();
+    }
+
+    function applyVelDrag(cx, cy) {
+      const m = drag;
+      if (m.velMode === "freehand") {
+        // accumulative sweep — don't reset, paint bars as the cursor passes them
+        const targets = velNotesNearX(cx, 5);
+        if (targets.length) {
+          const v = yToVel(cy);
+          for (const n of targets) { n.velocity = v; m.changed = true; }
+        }
+        return;
+      }
+      // ramp + proportional are deterministic: reset to captured originals first
+      for (const n of notes) { const o = m.orig.get(n._key); if (o != null) n.velocity = o; }
+      if (m.velMode === "proportional") {
+        const ratio = yToVel(cy) / (m.anchorOrig || 100);
+        for (const n of notes) {
+          if (n.muted || !selection.has(n._key)) continue;
+          const o = m.orig.get(n._key) || 100;
+          n.velocity = Math.max(1, Math.min(127, Math.round(o * ratio)));
+          m.changed = true;
+        }
+      } else { // ramp
+        const x0 = m.startX, y0 = m.startY, dx = cx - x0;
+        const lo = Math.min(x0, cx), hi = Math.max(x0, cx);
+        for (const n of notes) {
+          if (n.muted) continue;
+          const nx = beatToX(n.startTime);
+          if (nx < lo - 1 || nx > hi + 1) continue;
+          const t = Math.abs(dx) < 1e-6 ? 1 : (nx - x0) / dx;
+          n.velocity = yToVel(y0 + t * (cy - y0));
+          m.changed = true;
+        }
+      }
     }
 
     function onRightDown(e, x, y) {
@@ -930,6 +1266,9 @@
     }
 
     function onPencilDown(e, x, y) {
+      // Cmd/Ctrl+click in pencil mode = select/marquee (delegate to the mouse tool)
+      // instead of drawing a note.
+      if (e.metaKey || e.ctrlKey) return onMouseToolDown(e, x, y);
       const hit = noteAt(x, y);
       if (hit) {
         const n = hit.note;
@@ -984,6 +1323,11 @@
         return;
       }
 
+      if (drag.mode === "velocity") {
+        applyVelDrag(x, y);
+        requestDraw();
+        return;
+      }
       if (drag.mode === "paint") {
         drag.end = clampBeat(snapBeat(xToBeat(x)));
         if (Math.abs(drag.end - drag.start) > 1e-6) drag.moved = true;
@@ -1043,7 +1387,7 @@
           const n = notes.find(q => q._key === k);
           if (!n) continue;
           n.startTime = o.startTime + dB;
-          n.pitch = o.pitch + dP;
+          n.pitch = snapPitchToScale(o.pitch + dP);
         }
         if (dB !== 0 || dP !== 0) drag.changed = true;
         // audible pitch feedback while dragging (anchor note stands in)
@@ -1113,8 +1457,7 @@
           reArt(keysInRange(s, eb), currentArt);
         } else if (drag.hitSpan) {
           // click (no drag) on a span: adopt its articulation as current
-          currentArt = drag.hitSpan.art;
-          artSelect.value = currentArt;
+          setCurrentArt(drag.hitSpan.art);
         }
         previewPaint = null;
       } else if (drag.mode === "marquee") {
@@ -1141,26 +1484,40 @@
         lastLength = drag.note.duration;
       } else if (drag.mode === "move") {
         if (drag.pre && drag.changed) pushUndoState(drag.pre);
+      } else if (drag.mode === "velocity") {
+        if (drag.changed) {
+          pushUndoState(drag.pre);                 // → auto live-apply (velocity is serialized)
+          if (drag.anchor) previewNote(drag.anchor);
+        }
       }
       drag = null;
       requestDraw();
     });
 
-    // wheel: vertical scroll; shift = horizontal; ctrl/cmd = zoom (about cursor)
+    // Wheel (Ableton parity): plain = vertical scroll, Shift = horizontal scroll,
+    // Cmd/Ctrl = horizontal zoom about the cursor (ROW_H fixed — no pitch zoom).
+    // Scroll-up/away zooms in. The zoom factor scales with the scroll magnitude
+    // (normalized across pixel/line/page delta modes and clamped) so a trackpad —
+    // which fires many tiny events per gesture — doesn't compound into a huge jump.
     canvas.addEventListener("wheel", e => {
       e.preventDefault();
       if (e.ctrlKey || e.metaKey) {
         const rect = canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const beatAt = xToBeat(x);
-        const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+        // px-equivalent delta: lines ≈ 16px, pages ≈ 400px, then clamp one event.
+        let dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
+        dy = Math.max(-120, Math.min(120, dy));
+        const factor = Math.exp(-dy * 0.0100);
         pxPerBeat = Math.max(MIN_PPB, Math.min(MAX_PPB, pxPerBeat * factor));
         scrollX = beatAt * pxPerBeat - (x - GUTTER);
       } else if (e.shiftKey) {
-        scrollX += e.deltaY;
+        // Horizontal scroll — take whichever axis the device reports (vertical
+        // wheels send deltaY; horizontal wheels / trackpads send deltaX).
+        scrollX += (e.deltaY || e.deltaX);
       } else {
-        scrollY += e.deltaY;
-        scrollX += e.deltaX;
+        scrollY += e.deltaY;   // vertical scroll
+        scrollX += e.deltaX;   // trackpad horizontal component
       }
       clampScroll();
       requestDraw();
@@ -1208,6 +1565,10 @@
         requestDraw();
         return;
       }
+      // Clipboard — Cmd/Ctrl+C copy, +V paste at locator (or 0), +D duplicate-after.
+      if (cmd && k === "c") { e.preventDefault(); copySelection(); return; }
+      if (cmd && k === "v") { e.preventDefault(); pasteClipboard(marker != null ? marker : pasteAt); return; }
+      if (cmd && k === "d") { e.preventDefault(); duplicateSelection(); return; }
       // Bare 1-9: assign selected notes to articulation N (artMap[N-1]). Cmd/Ctrl+1/2
       // is grid stepping (handled above, cmd-guarded), so these never collide.
       if (!cmd && e.key >= "1" && e.key <= "9") {
@@ -1226,6 +1587,25 @@
         for (const n of notes) if (selection.has(n._key)) n.muted = anyActive;
         pushUndoState(pre);
         requestDraw();
+        return;
+      }
+      // Tool hotkeys: bare b = pencil, a = mouse, c = cut (Cmd variants handled above).
+      if (!cmd && (k === "b" || k === "a" || k === "c")) {
+        e.preventDefault();
+        setTool(k === "b" ? "pencil" : k === "a" ? "mouse" : "cut");
+        return;
+      }
+      // Bare L: legato — stretch selected notes to the next note on their row.
+      if (!cmd && k === "l") { e.preventDefault(); legatoSelection(); return; }
+      // Arrow keys: ←/→ nudge by grid; ↑/↓ transpose a semitone (Shift = octave).
+      if (!cmd && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+        e.preventDefault();
+        nudgeSelection(e.key === "ArrowRight" ? 1 : -1);
+        return;
+      }
+      if (!cmd && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+        e.preventDefault();
+        transposeSelection((e.key === "ArrowUp" ? 1 : -1) * (e.shiftKey ? 12 : 1));
         return;
       }
       if (cmd && k === "e") {
@@ -1303,6 +1683,7 @@
       const sep = document.createElement("div");
       sep.className = "ctx-sep";
       ctxMenu.appendChild(sep);
+      addItem("Legato (length to next)", null, () => legatoKeys(keys));
       addItem("Delete", null, () => {
         pushUndo();
         const set = new Set(keys);
@@ -1335,7 +1716,7 @@
     }
     // currentArt only affects NEW notes (and the paint/selector brushes) —
     // changing it never retroactively re-articulates existing notes.
-    artSelect.addEventListener("change", () => { currentArt = artSelect.value; });
+    artSelect.addEventListener("change", () => setCurrentArt(artSelect.value));
     snapSelect.addEventListener("change", () => { snap = parseFloat(snapSelect.value); });
     document.getElementById("zoom-in").onclick = () => { pxPerBeat = Math.min(MAX_PPB, pxPerBeat * 1.25); clampScroll(); requestDraw(); };
     document.getElementById("zoom-out").onclick = () => { pxPerBeat = Math.max(MIN_PPB, pxPerBeat / 1.25); clampScroll(); requestDraw(); };
@@ -1372,6 +1753,22 @@
       selectorToggle.classList.toggle("toggled", selectorMode);
       selectorToggle.textContent = "Art. select: " + (selectorMode ? "on" : "off");
     };
+
+    // Snap-to-Scale toggle. Disabled (and labelled) when the host couldn't read
+    // a scale; otherwise the title surfaces the scale name.
+    const scaleToggle = document.getElementById("scale-toggle");
+    if (!SCALE) {
+      scaleToggle.disabled = true;
+      scaleToggle.textContent = "Scale: n/a";
+      scaleToggle.title = "Snap to Scale unavailable — Live didn't report a scale for this song.";
+    } else {
+      if (SCALE.name) scaleToggle.title += " (" + SCALE.name + ")";
+      scaleToggle.onclick = () => {
+        scaleOn = !scaleOn;
+        scaleToggle.classList.toggle("toggled", scaleOn);
+        scaleToggle.textContent = "Scale: " + (scaleOn ? "on" : "off");
+      };
+    }
 
     document.getElementById("play-btn").onclick = togglePlayback;
 
@@ -1428,9 +1825,59 @@
       }
     }
 
+    // ---- Legend + status bar (Wave C) ----
+    // currentArt only affects NEW notes/brushes — route every write through here
+    // so the dropdown, legend highlight, and status line stay in sync.
+    function setCurrentArt(name) {
+      currentArt = name;
+      if (artSelect && name != null) artSelect.value = name;
+      renderLegend();
+    }
+    const GRID_LABELS = { "4": "1/1", "2": "1/2", "1": "1/4", "0.5": "1/8", "0.25": "1/16", "0.125": "1/32", "0": "Off" };
+    const gridLabel = () => GRID_LABELS[String(snap)] ?? String(snap);
+
+    function renderLegend() {
+      const host = document.getElementById("legend-chips");
+      if (!host) return;
+      host.innerHTML = "";
+      if (!artMap.length) {
+        const e = document.createElement("span");
+        e.className = "legend-empty";
+        e.textContent = "No articulations — Edit map… to add some";
+        host.appendChild(e);
+        return;
+      }
+      artMap.forEach((a, i) => {
+        const chip = document.createElement("div");
+        chip.className = "legend-chip" + (a.name === currentArt ? " current" : "");
+        chip.title = "Select all “" + a.name + "” notes (key " + (i + 1) + ")";
+        const num = document.createElement("span"); num.className = "num"; num.textContent = String(i + 1);
+        const sw = document.createElement("span"); sw.className = "swatch"; sw.style.background = artColor(a.name);
+        const nm = document.createElement("span"); nm.textContent = a.name;
+        chip.append(num, sw, nm);
+        // keep canvas focus (don't steal it on mousedown), select-by-art on click
+        chip.addEventListener("mousedown", ev => ev.preventDefault());
+        chip.addEventListener("click", () => {
+          selection = new Set(notes.filter(n => n.art === a.name).map(n => n._key));
+          setCurrentArt(a.name);
+          requestDraw();
+        });
+        host.appendChild(chip);
+      });
+    }
+
+    let lastStatus = "";
+    function renderStatus() {
+      const el = document.getElementById("legend-status");
+      if (!el) return;
+      const s = selection.size + " selected · grid " + gridLabel() + " · art: " + (currentArt ?? "—");
+      if (s !== lastStatus) { el.textContent = s; lastStatus = s; }
+    }
+
     // ---- Init ----
     function init() {
       fillArtSelect();
+      renderLegend();
       snapSelect.value = String(snap);
       setTool("mouse");
       resize();
