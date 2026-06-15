@@ -258,7 +258,6 @@ export function activate(activation: ActivationContext) {
   // loopStart/loopEnd are believed clip-local; we log once on first open so a
   // live test can confirm — if Live ever reports them arrangement-global,
   // subtract clip.startTime here (the only place that would change).
-  let loopLogged = false;
   const clipLoop = (
     clip: MidiClip<V>,
   ): { looping: boolean; loopStart: number; loopEnd: number } => {
@@ -266,14 +265,14 @@ export function activate(activation: ActivationContext) {
       const looping = clip.looping === true;
       const loopStart = clip.loopStart;
       const loopEnd = clip.loopEnd;
-      if (!loopLogged) {
-        loopLogged = true;
-        console.log(
-          `[articulation-roll] loop: looping=${looping} loopStart=${loopStart} ` +
-            `loopEnd=${loopEnd} (clip.startTime=${clip.startTime} duration=${clip.duration}) ` +
-            `— expect clip-local (loopEnd ≈ duration for a full-clip loop, not startTime+duration)`,
-        );
-      }
+      // Logged on EVERY open (debug for the brace position): prints the loop
+      // bounds alongside the clip's markers + arrangement position, so we can
+      // see whether loopStart/loopEnd share the note coordinate space.
+      console.log(
+        `[articulation-roll] loop: looping=${looping} loopStart=${loopStart} ` +
+          `loopEnd=${loopEnd} startMarker=${clip.startMarker} endMarker=${clip.endMarker} ` +
+          `(clip.startTime=${clip.startTime} duration=${clip.duration})`,
+      );
       if (typeof loopStart === "number" && typeof loopEnd === "number" && loopEnd > loopStart) {
         return { looping, loopStart, loopEnd };
       }
