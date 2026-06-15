@@ -20,7 +20,7 @@
                     "numoutlets": 0,
                     "patching_rect": [ 23.0, 10.0, 1080.0, 48.0 ],
                     "presentation_linecount": 3,
-                    "text": "ArtRoll Preview — bridges the Articulation Roll editor to this track. (1) OSC /artroll/note <pitch> <vel> <durMs> <ksPitch> <ksHoldMs> on UDP 7474 injects click/preview notes. (2) /artroll/play <songTimeMs> and /artroll/stop drive Live's REAL transport: set current_song_time to the locate, then (after a 30ms delay so Live commits the move) call start_playing on live_set — without the delay Live starts from its old position and ignores the locate. So the editor's Play hears the whole arrangement in sync, FROM the clicked position. (3) A metro polls current_song_time + is_playing and sends /artroll/pos <songTimeMs> <isPlaying> back on UDP 7476 so the editor playhead follows Live AND the editor knows transport sync is available (without these frames it falls back to a local single-clip playhead). The metro + Live-path are armed by live.thisdevice (on device load) AND by any incoming OSC (self-heal, so a paste-without-reload still starts reporting once the editor sends anything). midiin->midiout passes the track's own MIDI through (without it the device would swallow all MIDI and the track would go silent). Put this device on the edited track, BEFORE the instrument. ksPitch -1 = no keyswitch."
+                    "text": "ArtRoll Preview — bridges the Articulation Roll editor to this track. (1) OSC /artroll/note <pitch> <vel> <durMs> <ksPitch> <ksHoldMs> on UDP 7474 injects click/preview notes. (2) /artroll/play <songTimeMs> and /artroll/stop drive Live's REAL transport: set current_song_time to the locate, then (after a 30ms delay so Live commits the move) call continue_playing on live_set. continue_playing resumes from current_song_time; start_playing would jump back to the arrangement start (bar 1) and ignore the locate. So the editor's Play hears the whole arrangement in sync, FROM the clicked position. (3) A metro polls current_song_time + is_playing and sends /artroll/pos <songTimeMs> <isPlaying> back on UDP 7476 so the editor playhead follows Live AND the editor knows transport sync is available (without these frames it falls back to a local single-clip playhead). The metro + Live-path are armed by live.thisdevice (on device load) AND by any incoming OSC (self-heal, so a paste-without-reload still starts reporting once the editor sends anything). midiin->midiout passes the track's own MIDI through (without it the device would swallow all MIDI and the track would go silent). Put this device on the edited track, BEFORE the instrument. ksPitch -1 = no keyswitch."
                 }
             },
             {
@@ -237,8 +237,8 @@
                     "numinlets": 2,
                     "numoutlets": 1,
                     "outlettype": [ "" ],
-                    "patching_rect": [ 430.0, 230.0, 120.0, 22.0 ],
-                    "text": "call start_playing"
+                    "patching_rect": [ 430.0, 230.0, 140.0, 22.0 ],
+                    "text": "call continue_playing"
                 }
             },
             {
