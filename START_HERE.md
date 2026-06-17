@@ -63,7 +63,12 @@ Extensions for **Ableton Live** using the **Ableton Extension SDK** (currently `
   keyswitch notes on Apply). **Compiles clean; webview verified in browser.** Pending: `npm start` +
   in-Live Phase 1/2 checklist (the only step needing Ableton).
   → Resume: `05-handoffs/active/handoff-2026-06-11-articulation-roll.md`
+- [ ] **FL→Ableton Automation Converter** — Standalone Python tool (NOT an extension) at
+  `~/Projects/fl-ableton-automation`, v1 built & committed (`7dfee14`), 18 tests passing. FL→Ableton,
+  automation-only, template-based. **Blocker: verify PyFLP can parse FL Studio 2025 `.flp` files**
+  (friend has FL 2025 + Ableton 12). Next: drop a real FL 2025 `sample.flp` in `tests/fixtures/`.
+  → Resume: `05-handoffs/active/handoff-2026-06-16-fl-ableton-converter.md`
 
 ---
 
-_Last updated: 2026-06-11_
+_Last updated: 2026-06-16_
