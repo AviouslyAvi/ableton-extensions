@@ -41,6 +41,13 @@ const UNPACK_THIS_COMMAND_ID = "similarSamples.unpackThis";
 const DEFAULT_MATCH_COUNT = 3;
 const MIN_MATCH_COUNT = 1;
 const MAX_MATCH_COUNT = 12;
+// Tightness dial (0 = loose … 100 = tight). Acts as a minimum-similarity gate on the ranked
+// matches: at higher tightness only candidates whose displayed similarity clears the floor are
+// placed, so you may get FEWER than the requested count. Default 0 = loose = no gate, which
+// reproduces the pre-dial behaviour (place exactly `matchCount` matches).
+const MIN_TIGHTNESS = 0;
+const MAX_TIGHTNESS = 100;
+const DEFAULT_TIGHTNESS = 0;
 // Below this acoustic distance, a candidate is the source itself (or a near-identical dup) and
 // is excluded. Live copies a dragged-in sample into the project as "<name>-2.wav", so a path
 // check alone misses the self-match; near-zero distance catches it whatever the file is named.
@@ -136,6 +143,12 @@ async function loadIndex(context: Ctx): Promise<SampleIndex | null> {
   }
 }
 
+/** Persisted Find settings, remembered in config.json so the popup pre-fills last time's values. */
+interface FindConfig {
+  matchCount: number;
+  tightness: number;
+}
+
 /** Clamp any value to a whole number of matches within the supported range. */
 function clampMatchCount(n: unknown): number {
   const v = Math.round(Number(n));
@@ -143,28 +156,44 @@ function clampMatchCount(n: unknown): number {
   return Math.min(MAX_MATCH_COUNT, Math.max(MIN_MATCH_COUNT, v));
 }
 
-/** How many matches to place. Read fresh on every run; defaults if no/invalid config. */
-async function loadMatchCount(context: Ctx): Promise<number> {
+/** Clamp the tightness dial to a whole 0–100. */
+function clampTightness(n: unknown): number {
+  const v = Math.round(Number(n));
+  if (!Number.isFinite(v)) return DEFAULT_TIGHTNESS;
+  return Math.min(MAX_TIGHTNESS, Math.max(MIN_TIGHTNESS, v));
+}
+
+/**
+ * Minimum similarity % a match must clear at a given tightness. Loose (0) → 0% (no gate);
+ * tight (100) → 90%. Kept deliberately simple and mirrored verbatim in the popup JS
+ * (`Math.round(t * 0.9)`) so the dial's live readout always matches what the search filters on.
+ */
+function tightnessFloorPercent(tightness: number): number {
+  return Math.round(clampTightness(tightness) * 0.9);
+}
+
+/** Read both Find settings fresh on every run; defaults if no/invalid config. */
+async function loadConfig(context: Ctx): Promise<FindConfig> {
+  const fallback: FindConfig = { matchCount: DEFAULT_MATCH_COUNT, tightness: DEFAULT_TIGHTNESS };
   const storage = context.environment.storageDirectory;
-  if (!storage) return DEFAULT_MATCH_COUNT;
+  if (!storage) return fallback;
   try {
     const raw = await fs.readFile(path.join(storage, CONFIG_FILENAME), "utf-8");
-    const cfg = JSON.parse(raw) as { matchCount?: unknown };
-    return clampMatchCount(cfg.matchCount);
+    const cfg = JSON.parse(raw) as { matchCount?: unknown; tightness?: unknown };
+    return { matchCount: clampMatchCount(cfg.matchCount), tightness: clampTightness(cfg.tightness) };
   } catch {
-    return DEFAULT_MATCH_COUNT;
+    return fallback;
   }
 }
 
-async function saveMatchCount(context: Ctx, n: number): Promise<void> {
+async function saveConfig(context: Ctx, cfg: FindConfig): Promise<void> {
   const storage = context.environment.storageDirectory;
   if (!storage) return;
-  const matchCount = clampMatchCount(n);
-  await fs.writeFile(
-    path.join(storage, CONFIG_FILENAME),
-    JSON.stringify({ matchCount }, null, 2),
-    "utf-8",
-  );
+  const out: FindConfig = {
+    matchCount: clampMatchCount(cfg.matchCount),
+    tightness: clampTightness(cfg.tightness),
+  };
+  await fs.writeFile(path.join(storage, CONFIG_FILENAME), JSON.stringify(out, null, 2), "utf-8");
 }
 
 async function findSimilar(context: Ctx, handle: Handle): Promise<void> {
@@ -177,11 +206,14 @@ async function findSimilar(context: Ctx, handle: Handle): Promise<void> {
     return;
   }
 
-  // Ask how many matches to place before doing any work. The popup pre-fills with the
-  // remembered default, so a repeat user just hits Enter; Cancel/Escape does nothing.
-  const matchCount = await promptMatchCount(context);
-  if (matchCount == null) return;
-  await saveMatchCount(context, matchCount);
+  // Ask how many matches to place and how tight to filter before doing any work. The popup
+  // pre-fills with the remembered settings, so a repeat user just hits Enter; Cancel/Escape
+  // does nothing.
+  const opts = await promptFindOptions(context);
+  if (opts == null) return;
+  await saveConfig(context, opts);
+  const { matchCount, tightness } = opts;
+  const floorPct = tightnessFloorPercent(tightness);
 
   const index = await loadIndex(context);
   if (!index || index.entries.length === 0) {
@@ -213,7 +245,7 @@ async function findSimilar(context: Ctx, handle: Handle): Promise<void> {
     const sourceStem = sampleStem(sourcePath);
 
     await update("Ranking your library…", 40);
-    const ranked = index.entries
+    const candidates = index.entries
       .map((e) => ({
         entry: e,
         audio: audioDistance(sourceFeatures, e.features),
@@ -229,11 +261,22 @@ async function findSimilar(context: Ctx, handle: Handle): Promise<void> {
           r.audio > DEDUP_DISTANCE &&
           sampleStem(r.entry.path) !== sourceStem,
       )
-      .sort((a, b) => a.score - b.score)
+      .sort((a, b) => a.score - b.score);
+
+    // Tightness gate: keep only matches whose displayed similarity clears the floor, THEN take
+    // the top `matchCount`. At loose (floor 0) this is a no-op and we place exactly the count.
+    const ranked = candidates
+      .filter((r) => similarityPercent(r.score) >= floorPct)
       .slice(0, matchCount);
 
     if (ranked.length === 0) {
-      await notify(context, "No other samples in the index to compare against.");
+      await notify(
+        context,
+        candidates.length === 0
+          ? "No other samples in the index to compare against."
+          : `No samples cleared the tightness floor (≥ ${floorPct}% similar).<br><br>` +
+              "Lower the <b>Tightness</b> dial and try again.",
+      );
       return;
     }
     if (signal.aborted) return;
@@ -447,37 +490,37 @@ async function runUnpack(
 }
 
 /**
- * Find popup: a small Live-themed webview with a number field for how many matches to place.
- * Pre-fills with the value remembered in config.json so a repeat user just hits Enter. Returns
- * the clamped count when the user confirms (Find/Enter), or null when they cancel (Cancel/Escape)
- * — the caller persists the count and runs the search. Wrapped so a webview-bridge hiccup can
- * never throw into the command handler.
+ * Find popup: a small Live-themed webview with a number field for how many matches to place and
+ * a Loose↔Tight similarity dial. Pre-fills with the values remembered in config.json so a repeat
+ * user just hits Enter. Returns the clamped settings when the user confirms (Find/Enter), or null
+ * when they cancel (Cancel/Escape) — the caller persists them and runs the search. Wrapped so a
+ * webview-bridge hiccup can never throw into the command handler.
  */
-async function promptMatchCount(context: Ctx): Promise<number | null> {
-  const current = await loadMatchCount(context);
-  const html = findHtml(current);
+async function promptFindOptions(context: Ctx): Promise<FindConfig | null> {
+  const current = await loadConfig(context);
+  const html = findHtml(current.matchCount, current.tightness);
   let result: string;
   try {
-    result = await context.ui.showModalDialog(`data:text/html,${encodeURIComponent(html)}`, 360, 220);
+    result = await context.ui.showModalDialog(`data:text/html,${encodeURIComponent(html)}`, 360, 300);
   } catch (e) {
     console.error("[Similar Samples] find dialog failed", e);
     return null;
   }
 
-  // Find posts { matchCount: <int> }; Cancel/Escape posts { matchCount: null }.
-  let matchCount: unknown = null;
+  // Find posts { matchCount: <int>, tightness: <int> }; Cancel/Escape posts { matchCount: null }.
+  let payload: { matchCount?: unknown; tightness?: unknown };
   try {
-    ({ matchCount } = JSON.parse(result) as { matchCount?: unknown });
+    payload = JSON.parse(result) as { matchCount?: unknown; tightness?: unknown };
   } catch {
     return null; // no/!JSON payload → treat as cancel
   }
-  if (matchCount == null || !Number.isFinite(Number(matchCount))) return null;
+  if (payload.matchCount == null || !Number.isFinite(Number(payload.matchCount))) return null;
 
-  return clampMatchCount(matchCount);
+  return { matchCount: clampMatchCount(payload.matchCount), tightness: clampTightness(payload.tightness) };
 }
 
 /** Inline HTML for the Find webview, themed to Live's dark UI (see SDK modal-dialog example). */
-function findHtml(current: number): string {
+function findHtml(currentCount: number, currentTightness: number): string {
   return `<!doctype html><html><head><meta charset="utf-8"><style>
     *,*::before,*::after{box-sizing:border-box}*:not(dialog){margin:0}input,button{font:inherit}
     :root{
@@ -493,9 +536,15 @@ function findHtml(current: number): string {
     .title{font-size:1.1rem;color:var(--text)}
     .hint{font-size:.95rem;color:var(--text2)}
     label{display:flex;flex-direction:column;gap:.3em;cursor:pointer}
-    input{font-size:1rem;line-height:1.5;background:var(--input);color:var(--text);
+    input[type=number]{font-size:1rem;line-height:1.5;background:var(--input);color:var(--text);
       border:1px solid var(--border);height:22px;padding:0 .4em;width:100%;outline-offset:0}
+    input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:4px;padding:0;
+      margin:.35em 0;background:var(--input);border:1px solid var(--border);border-radius:2px;cursor:pointer}
+    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:13px;
+      height:13px;border-radius:50%;background:var(--accent);border:1px solid var(--border);cursor:pointer}
     input:focus{outline:2px solid var(--text2)}
+    .dialrow{display:flex;justify-content:space-between;align-items:baseline;color:var(--text2)}
+    #floor{color:var(--text)}
     .buttons{display:flex;gap:.5em;justify-content:flex-end;margin-top:.25em}
     button{font-size:1rem;line-height:1;background:var(--control);color:var(--text);
       border:1px solid var(--border);height:22px;padding:0 1.1em;border-radius:1em;cursor:pointer}
@@ -507,9 +556,15 @@ function findHtml(current: number): string {
       <div class="title">Similar Samples</div>
       <label for="count">Matches to place (${MIN_MATCH_COUNT}–${MAX_MATCH_COUNT})
         <input id="count" type="number" min="${MIN_MATCH_COUNT}" max="${MAX_MATCH_COUNT}"
-          step="1" value="${current}" />
+          step="1" value="${currentCount}" />
       </label>
-      <div class="hint">Each match lands in its own take lane, aligned to the clicked clip.</div>
+      <label for="tightness">Tightness
+        <input id="tightness" type="range" min="${MIN_TIGHTNESS}" max="${MAX_TIGHTNESS}"
+          step="1" value="${currentTightness}" oninput="updateFloor()" />
+      </label>
+      <div class="dialrow"><span>Loose</span><span id="floor"></span><span>Tight</span></div>
+      <div class="hint">Each match lands in its own take lane, aligned to the clicked clip.
+        Tighter keeps only closer matches — you may get fewer than the count.</div>
       <div class="buttons">
         <button onclick="cancel()">Cancel</button>
         <button class="primary" onclick="find()">Find</button>
@@ -520,11 +575,16 @@ function findHtml(current: number): string {
         if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.live)
           window.webkit.messageHandlers.live.postMessage(m);
         else if(window.chrome&&window.chrome.webview) window.chrome.webview.postMessage(m);}
+      // Mirrors tightnessFloorPercent() server-side: floor% = round(tightness * 0.9).
+      function updateFloor(){var t=parseInt(document.getElementById("tightness").value,10)||0;
+        var f=Math.round(t*0.9);
+        document.getElementById("floor").textContent=f<=0?"no minimum":"\\u2265 "+f+"% similar";}
       function find(){var v=parseInt(document.getElementById("count").value,10);
-        send({matchCount:isNaN(v)?null:v});}
+        var t=parseInt(document.getElementById("tightness").value,10);
+        send({matchCount:isNaN(v)?null:v,tightness:isNaN(t)?0:t});}
       function cancel(){send({matchCount:null});}
       document.addEventListener("DOMContentLoaded",function(){
-        var el=document.getElementById("count");el.focus();el.select();});
+        updateFloor();var el=document.getElementById("count");el.focus();el.select();});
       document.addEventListener("keydown",function(e){
         if(e.key==="Enter")find();if(e.key==="Escape")cancel();});
     </script>

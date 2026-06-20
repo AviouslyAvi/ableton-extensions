@@ -72,12 +72,49 @@ Extensions for **Ableton Live** using the **Ableton Extension SDK** (currently `
   **NEW (session 5, 2026-06-13): TRANSPORT SYNC SHIPPED + VERIFIED LIVE** — Play
   now drives Live's real transport via the M4L bridge (hear the whole arrangement,
   in sync; playhead follows Live). Reverse UDP :7476 + maxpat transport objects.
-  **PR #4** (`claude/artroll-transport-sync`, HEAD `bd17940`). ADR:
-  `01-decisions/2026-06-13-artroll-transport-via-m4l-bridge.md`. **Next: 8-item
-  feature backlog** in `04-plans/artroll-feature-backlog.md` (start with KS
-  pre-roll nudge).
-  → Resume: `05-handoffs/active/handoff-2026-06-13-artroll-feature-backlog.md`
-  (prior: `…/handoff-2026-06-13-playback-fix.md`; full record: `…/handoff-2026-06-11-articulation-roll.md`)
+  **PR #4** (`claude/artroll-transport-sync`, HEAD `bd17940`, merged `868818b`).
+  ADR: `01-decisions/2026-06-13-artroll-transport-via-m4l-bridge.md`.
+  **NEW (session 6, 2026-06-13): 5 items SHIPPED + VERIFIED LIVE** on
+  `claude/artroll-backlog` (off main; `51ba0cb`, `9ec1d77`) — #6 KS pre-roll
+  nudge, #3 hotkeys 1–9, #4 key-0 deactivate (`NoteDescription.muted`), #1
+  re-preview-on-change, and #7 **live preview** (`POST /apply` writes
+  `clip.notes` mid-modal — the bet held). Branch not pushed / no PR yet.
+  **NEW (session 7, 2026-06-13): PR #5 opened** for the 5 verified items
+  (remote head `9ec1d77`). Live-apply **ADR written** (`975bc47`). **Round 2
+  Waves A–D BUILT + committed locally** (not pushed) on `claude/artroll-backlog`:
+  A `e5446e3` (hotkeys/arrows/clipboard/pencil-marquee/locator), B `e5d065f`
+  (loop playback + playhead follow + payload loop fields), C `4f3fbc0`
+  (legend/status/swatch-select), D `7771461` (velocity drag-lane). **Wave E
+  half-done: extension.ts `scale` payload UNCOMMITTED, roll.html side not
+  written. Wave F not started. NOTHING in Round 2 live-verified yet** (Avi chose
+  batch-verify). ⚠️ **Do NOT push the branch** — PR #5 tracks it and would
+  swallow the unverified Round-2 commits; decide own-PR-vs-fold first.
+  Waves A–F design in `04-plans/artroll-feature-backlog.md` ("IMPLEMENTATION
+  DESIGN"); code-level plan `~/.claude/plans/a-velocity-editing-zippy-dawn.md`.
+  **NEW (session 8, 2026-06-14): Round 2 A–F FINISHED + live-verified once.**
+  Wave E (snap-to-scale + legato) and Wave F (wheel-zoom) built/committed; full
+  A–F batch live-verified. Avi's pass found 3 bugs — **all FIXED** (`71b5c98`):
+  Cmd+V paste-after (was clip-start), legato length-to-next-in-time (was same-
+  pitch→clip-end), trackpad zoom speed. **PR structure DECIDED = own Round 2 PR:**
+  Round 2 now on its own branch **`claude/artroll-round2`** (`71b5c98`), and
+  `claude/artroll-backlog` was reset to `9ec1d77` so **PR #5 stays scoped**.
+  All 3 fixes re-verified green; zoom dialed to `0.0100`. **PR #6 MERGED to main**
+  (merge `8abfa6e`, `claude/artroll-round2` → main; PR #5 untouched, also merged).
+  Waves A–F **marked done** in `04-plans/artroll-feature-backlog.md`. Round 2 = ✅.
+  **NEW (session 10, 2026-06-14): ROUND 3 #15/#16/#17 BUILT + VERIFIED LIVE** on
+  branch **`claude/artroll-round3`** (off merged Round 2 `71b5c98`): #15 pencil
+  multi-note edge-resize honors the selection (`7a563ea`); #16 cut snaps to grid
+  by default + Alt=freehand, #17 Alt=off-grid note drag Mouse+Pencil (`7c3902f`).
+  All three marked ✅ in the backlog. **Branch pushed; PR #7 OPEN** (base main;
+  PR #5/#6 untouched, both merged) — awaiting merge.
+  Remaining Round 3: #19 transport-locate + loop viz (bridge), #18 CC envelopes
+  (own ADR). Older: #5b/#2/#8/#10/#13/#14 open. ⚠️ Dev-host gotcha (stale bundle:
+  needs build + FULL host restart + reopen modal; orphaned `ExtensionHost/node`
+  squatters need `pkill -f "articulation-roll/.live-storage"` too) documented in
+  the handoff.
+  → Resume: `05-handoffs/active/handoff-2026-06-14-artroll-round3.md`
+  (prior: `…/archive/handoff-2026-06-14-artroll-round2-verify.md`;
+  full record: `…/handoff-2026-06-11-articulation-roll.md`)
 
 - [ ] **Keyswitch** — Fast-apply + **bulk auto-placement** (per onset / per phrase, ranged
   apply, KS_LEAD pre-roll) committed (`5a62517` on `keyswitch-fast-apply`, now pushed).

@@ -67,6 +67,8 @@ export function activate(context: ActivationContext) {
 
 **Run:** `npm start` (builds via esbuild + loads into Live). **Required:** `.env` must set `EXTENSION_HOST_PATH=…` or `npm start` can't connect to Live.
 
+> **New here / running it yourself?** See [`running-the-dev-host.md`](running-the-dev-host.md) — a plain-English start/stop/restart/troubleshoot runbook (cheat sheet at top).
+
 **Build:** `build.ts` uses esbuild — `bundle: true`, `format: "cjs"`, `platform: "node"`; `--production` minifies. Scripts: `start`, `build`, `package`.
 
 ---
@@ -164,6 +166,25 @@ export function activate(context: ActivationContext) {
   **omit** optional keys entirely rather than passing `undefined`.
 - With `moduleResolution:"nodenext"`, relative imports need a **`.js` extension** in the specifier
   (`import {x} from "./features.js"`) even though the file is `.ts` — tsc, tsx, and esbuild all map it.
+
+### Host won't connect — "pre-greeting stall" (SOLVED 2026-06-12)
+Symptom: `npm start` logs `Started: Extension Host 1.0.0` then **nothing** — no
+`Extension Host sends greeting to Live`, no context-menu action appears, extension
+never registers. Burned a whole session on this; here's the real cause and fix.
+- **Root cause: an ORPHANED ExtensionHost process squatting the single dev-host slot.**
+  Live spawns `…/Helpers/ExtensionHost/node -e require('…ExtensionHostNodeModule.node').initialize(…)`
+  per dev extension. If a prior session's host gets **reparented to PID 1** (Live died but the
+  node child survived), it keeps the one dev-host connection and Live silently refuses the new one.
+  Survives Live quit/reopen, Dev Mode toggles, and socket deletion — because it is NOT Live's child.
+- **THE FIX:** `pkill -9 -f "Helpers/ExtensionHost/node"` then relaunch `npm start`. Greeting lands immediately.
+- **Diagnose:** `ps axo pid,ppid,command | grep "Helpers/ExtensionHost/node"` — any row with **ppid 1**
+  whose `path` is a *different* extension = the squatter. Confirm Live is actually listening first:
+  `lsof -nP -p $(pgrep -f MacOS/Live) | grep exthost` should show `exthost-ctrl/flip-api-ipc-channel`
+  in `$TMPDIR` (`/var/folders/…/T/`). Live only opens these when **Developer Mode is ON**.
+- **Red herrings (all ruled out, don't re-chase):** TMPDIR mismatch (host inherits it fine; the one
+  success even ran with it stripped), stale sockets, manifest, Live version, launch method, preview.ts.
+- Corollary to the handoff's "one host at a time": it's not just *your* extension — ANY orphaned dev
+  host blocks the slot.
 
 ### Capability cheat-sheet (what you CAN do)
 Manipulate the Live Set object model (tracks/clips/devices/scenes/mixer params), create/delete
