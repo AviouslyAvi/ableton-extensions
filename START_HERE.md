@@ -49,11 +49,6 @@ Extensions for **Ableton Live** using the **Ableton Extension SDK** (currently `
 
 ## Active threads
 
-- [ ] **Keyswitch** — Promoted to `02-extensions/keyswitch/`. Fast-apply UX built: per-articulation
-  context-menu items (no modal) + repeat-last action, on top of the verified Phase A–D spike.
-  Compiled to `dist-extensions/Keyswitch.ablx`. **Pending: re-test the fast-apply items live**
-  (host didn't reconnect this session) before calling it done.
-  → Resume: `05-handoffs/active/handoff-2026-06-06-keyswitch.md`
 - [ ] **Similar Samples** — Find→take lanes, similarity %, dedup, both Unpack commands, and an
   "Original" A/B lane all built & verified live. Pending: confirm Original auto-skip on unpack,
   then `npm run package`. Next build: "Unpack This Take Lane → Track" (single-lane).
@@ -66,4 +61,4 @@ Extensions for **Ableton Live** using the **Ableton Extension SDK** (currently `
 
 ---
 
-_Last updated: 2026-06-11_
+_Last updated: 2026-06-20_

@@ -7,7 +7,6 @@ this workspace, one `.ablx` per extension. Drop any of these onto the
 | File | Source project |
 |---|---|
 | `Similar-Samples.ablx` | [`02-extensions/similar-samples/`](../02-extensions/similar-samples/) |
-| `Keyswitch.ablx` | [`02-extensions/keyswitch/`](../02-extensions/keyswitch/) |
 
 ## Rebuilding
 
@@ -23,7 +22,7 @@ Or one at a time, from inside an extension's folder:
 npm run package          # outputs ../../dist-extensions/<Name>.ablx
 ```
 
-Filenames here are **unversioned and stable** (e.g. `Keyswitch.ablx`) so the
+Filenames here are **unversioned and stable** (e.g. `Similar-Samples.ablx`) so the
 folder is a clean "install these" set — the real version lives inside each
 package's `manifest.json`. These `.ablx` files are tracked in git (via a
 `!dist-extensions/*.ablx` exception in `.gitignore`) so the compiled set ships
