@@ -59,7 +59,7 @@ Extensions for **Ableton Live** using the **Ableton Extension SDK** (currently `
   webview verified in browser; compiled to `dist-extensions/ArticulationRoll.ablx`.** The #19 commits
   are WIP-flavored ("brace debug") — Pending: in-Live verification of the transport sync + Phase 1/2
   checklist (the only steps needing Ableton). Full #19 branch backed up at `origin/claude/artroll-round3-transport`.
-  → Resume: `05-handoffs/active/handoff-2026-06-14-artroll-round3.md`
+  → Resume: `05-handoffs/active/handoff-2026-06-21-repo-cleanup-artroll19.md`
 - [ ] **FL→Ableton automation converter** — standalone project (not an extension); handoff lives here.
   v1 built, blocked on a real FL 2025 parse test. → Resume: `05-handoffs/active/handoff-2026-06-16-fl-ableton-converter.md`
 
