@@ -6,6 +6,7 @@ this workspace, one `.ablx` per extension. Drop any of these onto the
 
 | File | Source project |
 |---|---|
+| `ArticulationRoll.ablx` | [`02-extensions/articulation-roll/`](../02-extensions/articulation-roll/) |
 | `Similar-Samples.ablx` | [`02-extensions/similar-samples/`](../02-extensions/similar-samples/) |
 
 ## Rebuilding
