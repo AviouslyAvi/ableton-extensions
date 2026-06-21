@@ -54,11 +54,15 @@ Extensions for **Ableton Live** using the **Ableton Extension SDK** (currently `
   then `npm run package`. Next build: "Unpack This Take Lane → Track" (single-lane).
   → Resume: `05-handoffs/active/handoff-2026-06-05-similar-samples.md`
 - [ ] **Articulation Roll** — FL-style articulation-aware MIDI editor in `02-extensions/articulation-roll/`.
-  Modal canvas piano roll (single-click place + remembered length, region-based articulation lane →
-  keyswitch notes on Apply). **Compiles clean; webview verified in browser.** Pending: `npm start` +
-  in-Live Phase 1/2 checklist (the only step needing Ableton).
-  → Resume: `05-handoffs/active/handoff-2026-06-11-articulation-roll.md`
+  Modal canvas piano roll (region-based articulation lane → keyswitch notes on Apply), now through
+  **Round 3 + #19 transport-sync** (loop-region viz, synced-play locate, device init). **Compiles clean;
+  webview verified in browser; compiled to `dist-extensions/ArticulationRoll.ablx`.** The #19 commits
+  are WIP-flavored ("brace debug") — Pending: in-Live verification of the transport sync + Phase 1/2
+  checklist (the only steps needing Ableton). Full #19 branch backed up at `origin/claude/artroll-round3-transport`.
+  → Resume: `05-handoffs/active/handoff-2026-06-14-artroll-round3.md`
+- [ ] **FL→Ableton automation converter** — standalone project (not an extension); handoff lives here.
+  v1 built, blocked on a real FL 2025 parse test. → Resume: `05-handoffs/active/handoff-2026-06-16-fl-ableton-converter.md`
 
 ---
 
-_Last updated: 2026-06-20_
+_Last updated: 2026-06-21_
