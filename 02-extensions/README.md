@@ -40,4 +40,5 @@ npm start
 ## Extensions index
 | Extension | Purpose | Status |
 |---|---|---|
-| [similar-samples](similar-samples/README.md) | Right-click an Arrangement audio clip → find & place 2–3 sonically similar samples from an indexed library | Built; DSP+ranking validated offline. Pending in-Live test (`npm start`). |
+| [articulation-roll](articulation-roll/README.md) | Right-click a MIDI clip → **Edit (Articulation Roll)…** → an FL-style, articulation-aware piano roll opens in a modal. Tag notes with articulations (sustain, staccato, pizzicato…) and Apply writes the matching keyswitch trigger notes back to the clip in one undo step. Optional audible preview + transport sync via a localhost/OSC bridge to a bundled Max device. | Builds clean (`tsc --noEmit` + esbuild); webview verified in a browser harness; `npm start` handshake verified 2026-06-11. In-Live walk of the checklist is the remaining step. |
+| [similar-samples](similar-samples/README.md) | Right-click an Arrangement audio clip → **Find Similar Samples** → finds the closest-sounding samples in your indexed library and stacks the top 3 in new take lanes on the same track, each aligned to the original, plus a reference copy of the source. | Built; DSP+ranking validated offline. Pending in-Live test (`npm start`). |

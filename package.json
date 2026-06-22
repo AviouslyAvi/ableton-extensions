@@ -1,27 +1,13 @@
 {
-  "name": "strip-silence",
+  "name": "ableton-extensions-workspace",
   "version": "1.0.0",
-  "main": "dist/extension.js",
+  "private": true,
+  "description": "Workspace for building Ableton Live Extensions. Each shippable extension is a self-contained SDK project under 02-extensions/. See README.md and START_HERE.md.",
+  "type": "module",
   "engines": {
     "node": ">=24.14.1"
   },
-  "type": "module",
   "scripts": {
-    "build": "tsc --noEmit && tsx build.ts --production",
-    "build:dev": "tsc --noEmit && tsx build.ts",
-    "start": "npm run build:dev && extensions-cli run",
-    "package": "npm run build && extensions-cli package",
     "package:all": "npm --prefix 02-extensions/articulation-roll run package && npm --prefix 02-extensions/similar-samples run package"
-  },
-  "dependencies": {
-    "@ableton-extensions/sdk": "file:./vendor/ableton-extensions-sdk-1.0.0-beta.0.tgz"
-  },
-  "devDependencies": {
-    "@ableton-extensions/cli": "file:./vendor/ableton-extensions-cli-1.0.0-beta.0.tgz",
-    "@types/node": "^24.1.0",
-    "esbuild": "0.28.0",
-    "tsx": "^4.19.0",
-    "typescript": "^5.9.3",
-    "vite": "^6.0.0"
   }
 }

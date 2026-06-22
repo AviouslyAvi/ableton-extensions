@@ -10,6 +10,99 @@ This is the sibling of the [`keyswitch`](../keyswitch/) extension — it reuses 
 same articulation→pitch map shape, but gives you a full editing surface instead
 of one-shot context-menu inserts.
 
+## In plain English (read this first)
+
+If you write for sample libraries (strings, brass, etc.), you know the pain:
+those libraries switch between **articulations** — sustain, staccato, pizzicato,
+legato — when they hear a special low "keyswitch" note. Normally you have to draw
+those keyswitch notes by hand, on the right pitches, in the right order. It's
+fiddly and easy to get wrong.
+
+**Articulation Roll** takes that chore away. Instead of thinking about keyswitch
+notes, you just **paint your melody and tag each note with an articulation** (the
+way FL Studio lets you "articulate" a note). When you hit **Apply**, the extension
+automatically writes the correct keyswitch notes for you — in the right places,
+in the right order — all as a single, one-click-undoable change.
+
+Here's the whole idea in four steps:
+
+1. **Right-click a MIDI clip → "Edit (Articulation Roll)…"** A piano-roll window
+   opens. Your existing notes appear, already color-coded by articulation.
+2. **Edit your notes** like a normal piano roll — place, move, resize, delete.
+   It behaves like Ableton's editor by default, with an optional FL-style pencil.
+3. **Tag notes with articulations** — pick one from the toolbar for new notes, or
+   right-click existing notes to recolor them. Each color = one articulation.
+4. **Hit Apply.** Your notes go back into the clip *plus* the matching keyswitch
+   trigger notes, so your sample library plays the right articulation. Press
+   **Cancel/Esc** instead and nothing changes.
+
+> Think of it as a smart overlay on Ableton's piano roll: you work in colors
+> (articulations), and it translates those colors into the technical keyswitch
+> notes your instrument actually needs. **One window owns the clip while open** —
+> don't edit the same clip in Live at the same time, since Apply overwrites it.
+
+## Quick shortcut guide (cheat sheet)
+
+Everything you can do in the roll, in one place. (Mac uses **Cmd**, Windows/Linux
+use **Ctrl** — shown as **Cmd/Ctrl** below.)
+
+### Tools
+
+| Key / control | What it does |
+|---|---|
+| Toolbar **Mouse / Pencil / Cut** | Pick the active tool. |
+| **Hold E** | Temporarily switch to **Cut** from any tool; release to switch back. |
+| Toolbar **Art. select** toggle | Articulation Selector Mode — clicking a note recolors it to the current articulation instead of selecting it. |
+| Toolbar **Articulation** selector | Sets the articulation that **newly placed** notes get (does not change existing notes). |
+| Toolbar **Snap** selector | Grid size for snapping: 1/1 … 1/32, or Off. |
+
+### Editing notes
+
+| Action | Result |
+|---|---|
+| **Click empty grid** (Mouse) | Drop the snapped insert marker; deselect. No note placed. |
+| **Double-click + drag** (Mouse) | Place a note and extend it as you drag. |
+| **Click empty grid** (Pencil) | Instantly place a note at the snapped line, current articulation. |
+| **Drag after placing** (Pencil) | Move the note. **Shift+drag** extends its right edge instead. |
+| **Click a note** | Select it (and remember its length for new notes). |
+| **Shift+click / Cmd+click a note** | Add/remove it from the multi-selection. |
+| **Cmd/Ctrl+A** | Select all notes. |
+| **Cmd/Ctrl+drag empty grid** | Marquee-select every note in the rectangle. |
+| **Drag a selected note** | Move the whole selection together (snapped, clamped). |
+| **Drag a note's right edge** | Resize it. |
+| **Delete / Backspace** | Delete all selected notes. |
+| **Key 0** | Toggle the selected notes' **deactivated (muted)** state. |
+
+### Cutting
+
+| Action | Result |
+|---|---|
+| **Click / drag across notes** (Cut) | Split notes at the cut point — unsnapped by default. |
+| **Hold Cmd/Ctrl while cutting** | Snap the cut to the grid. |
+| **Cmd/Ctrl+E** | Split the **selected** notes at the insert marker (snapped). |
+
+### Articulations (recolor existing notes)
+
+| Action | Result |
+|---|---|
+| **Right-click a note** | Menu of every articulation (+ "No articulation" + Delete). Acts on the whole selection if the note is selected. |
+| **Art. select** on, then click a note | Convert it to the current articulation. |
+| **Drag a span in the bottom lane** | Bulk-recolor every note starting inside the span to the current articulation. |
+| **Click a span in the bottom lane** | Adopt that span's articulation as the current one. |
+| Toolbar **Edit map…** | Open the articulation→pitch map editor (name, MIDI pitch, hold). |
+
+### Navigation, undo, finishing
+
+| Action | Result |
+|---|---|
+| **Cmd/Ctrl+Z** | Undo the last edit (place, move, resize, delete, recolor, paint, cut). |
+| **Cmd/Ctrl+Shift+Z** | Redo. |
+| **Ctrl/Cmd + scroll wheel** | Zoom about the cursor. |
+| **Scroll wheel** | Scroll vertically. |
+| **Shift + scroll wheel** | Scroll horizontally. |
+| **Apply** | Write notes + keyswitches back to the clip (one undo step in Live). |
+| **Cancel / Esc** | Close without changing the clip. |
+
 ## Why a popup (and what it can't be)
 
 The SDK exposes **modal webviews only** — there is no way to dock a panel into
