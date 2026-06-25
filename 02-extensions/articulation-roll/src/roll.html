@@ -29,6 +29,26 @@
       --c-input-bg-500: oklch(from var(--p-live-input-bg) l c h);
       --c-highlight--primary: oklch(from var(--p-live-accent-primary) l c h);
     }
+    /* Ableton+ — deeper, cooler studio black with a hotter accent */
+    html[data-theme="Ableton+"] {
+      --p-live-ui-bg: hsl(222, 14%, 13%);
+      --p-live-control-bg: hsl(222, 14%, 17%);
+      --p-live-input-bg: hsl(222, 18%, 9%);
+      --p-live-text-primary: hsl(220, 16%, 82%);
+      --p-live-control-border: hsl(222, 22%, 6%);
+      --p-live-text-secondary: hsl(220, 10%, 50%);
+      --p-live-accent-primary: hsl(28, 100%, 60%);
+    }
+    /* Warm — warm charcoal, softer and less clinical */
+    html[data-theme="Warm"] {
+      --p-live-ui-bg: hsl(28, 11%, 14%);
+      --p-live-control-bg: hsl(28, 11%, 18%);
+      --p-live-input-bg: hsl(28, 14%, 9%);
+      --p-live-text-primary: hsl(36, 18%, 83%);
+      --p-live-control-border: hsl(28, 16%, 7%);
+      --p-live-text-secondary: hsl(32, 12%, 52%);
+      --p-live-accent-primary: hsl(36, 92%, 60%);
+    }
     html, body { height: 100%; }
     body {
       background-color: var(--c-bg--0500);
@@ -66,6 +86,7 @@
     .alx-button:hover { background-color: var(--c-control-bg--400); }
     .alx-button:active { color: var(--c-control-on-foreground); background-color: var(--c-highlight--primary); }
     .alx-button:focus { outline: 2px solid var(--c-control-outline); }
+    .alx-button:disabled { opacity: 0.4; cursor: default; }
     .alx-button.small { padding: 0 0.5em; height: 18px; }
     .alx-button.primary { background-color: var(--c-highlight--primary); color: var(--c-control-on-foreground); }
     .alx-button.tool.active, .alx-button.toggled { background-color: var(--c-highlight--primary); color: var(--c-control-on-foreground); }
@@ -77,17 +98,26 @@
       padding: 0.3em 0.6em; flex: 0 0 auto;
       border-bottom: 1px solid var(--c-control-border);
     }
-    .legend-chips { display: flex; align-items: center; gap: 0.4em; overflow: hidden; flex: 1 1 auto; }
+    .legend-chips { display: flex; align-items: center; gap: 0.4em 0.4em; flex-flow: row wrap; row-gap: 0.3em; align-content: flex-start; overflow: visible; flex: 1 1 auto; }
     .legend-chip {
-      display: inline-flex; align-items: center; gap: 0.35em;
-      height: 18px; padding: 0 0.55em; border-radius: 1em;
+      display: inline-flex; align-items: center; gap: 0.4em;
+      height: 20px; padding: 0 0.55em 0 0.3em; border-radius: 1em;
       background: var(--c-control-bg--500); border: 1px solid var(--c-control-border);
       cursor: pointer; user-select: none; white-space: nowrap; color: var(--c-text-primary);
     }
     .legend-chip:hover { background: var(--c-control-bg--400); }
     .legend-chip.current { outline: 1px solid var(--c-highlight--primary); outline-offset: -1px; }
-    .legend-chip .num { color: var(--c-text-secondary); font-variant-numeric: tabular-nums; }
-    .legend-status { color: var(--c-text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; flex: 0 0 auto; }
+    /* hotkey cap — makes it read as a keyboard shortcut (keys 1–9) */
+    .legend-chip .num {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 15px; height: 15px; padding: 0 3px; border-radius: 3px;
+      background: var(--c-control-bg--300, var(--c-bg--0500)); border: 1px solid var(--c-control-border);
+      color: var(--c-text-secondary); font-size: 0.82em; line-height: 1;
+      font-variant-numeric: tabular-nums; box-shadow: 0 1px 0 var(--c-control-border);
+    }
+    .legend-chip.current .num { color: var(--c-text-primary); }
+    .legend-chip .num.nokey { visibility: hidden; }
+    .legend-status { color: var(--c-text-primary); font-variant-numeric: tabular-nums; white-space: nowrap; flex: 0 0 auto; }
     .legend-empty { color: var(--c-text-secondary); }
 
     /* Right-click context menu */
@@ -103,6 +133,9 @@
     /* Map editor overlay */
     .overlay {
       position: absolute; inset: 0; display: none;
+      /* Above floating in-canvas controls (e.g. the lane-switch at z-index 6) so a
+         modal always covers them — otherwise the lane chooser punched through. */
+      z-index: 20;
       background: oklch(from var(--c-bg--0500) l c h / 0.92);
       padding: 1.25em; overflow: auto;
     }
@@ -110,6 +143,12 @@
     .overlay h1 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5em; }
     .overlay p.muted { color: var(--c-text-secondary); margin-bottom: 0.75em; }
     table { width: 100%; border-collapse: collapse; max-width: 520px; }
+    table.map-col { width: auto; max-width: none; }
+    table.map-col input.alx-input:not(.pitch) { width: 132px; }
+    table.map-col tbody tr td { transition: background-color .1s ease; }
+    table.map-col tbody tr.sel td { background: oklch(from var(--c-highlight--primary) l c h / 0.2); }
+    table.map-col tbody tr.sel td:first-child { box-shadow: inset 2px 0 0 var(--c-highlight--primary); }
+    table.map-col tbody tr.sel input.alx-input { border-color: oklch(from var(--c-highlight--primary) l c h / 0.8); }
     th { text-align: left; color: var(--c-text-secondary); font-weight: 500; padding-bottom: 0.25em; }
     td { padding: 2px 6px 2px 0; vertical-align: middle; }
     td.pname { color: var(--c-text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -118,41 +157,265 @@
     .hint { color: var(--c-text-secondary); }
     .preview-ind { font-size: 11px; color: var(--c-text-secondary); user-select: none; white-space: nowrap; }
     .preview-ind.on { color: #7c5; }
+
+    /* ============================================================
+       Makeover additions — visual only. No behavior/shortcut changes.
+       ============================================================ */
+    body { font-size: 12px; }
+
+    .toolbar {
+      gap: 0.35em; padding: 0.4em 0.6em; flex-wrap: wrap; row-gap: 0.35em;
+      background: linear-gradient(180deg,
+        oklch(from var(--c-control-bg--500) calc(l * 1.14) c h),
+        var(--c-bg--0500));
+      box-shadow: inset 0 -1px 0 oklch(from var(--c-control-border) l c h / 0.7);
+    }
+    /* grouped clusters of controls, each in a soft well with an uppercase label */
+    .tgroup {
+      display: inline-flex; align-items: center; gap: 0.3em;
+      padding: 0 0.4em; height: 28px; border-radius: 8px;
+      background: oklch(from var(--c-bg--0500) calc(l * 0.84) c h);
+      border: 1px solid oklch(from var(--c-control-border) l c h / 0.7);
+    }
+    .tgroup > .glabel {
+      font-size: 0.76rem; letter-spacing: 0.05em; text-transform: uppercase;
+      color: var(--c-text-secondary); padding-right: 0.1em;
+    }
+
+    .alx-button {
+      height: 22px; border-radius: 6px; padding: 0 0.6em;
+      display: inline-flex; align-items: center; gap: 0.42em;
+      transition: background-color .12s ease, color .12s ease, box-shadow .14s ease, transform .06s ease;
+    }
+    .alx-button:active { transform: none; }
+    /* Normalize all overlay/panel header h1s to the same size */
+    .overlay h1 { font-size: 13px; font-weight: 600; margin: 0; letter-spacing: 0.01em; color: var(--c-text-primary); }
+    .alx-button.small { height: 22px; padding: 0 0.45em; }
+    .alx-button .ic { width: 14px; height: 14px; display: block; flex: 0 0 auto; }
+    .alx-button.tool.active {
+      box-shadow: 0 0 0 1px var(--c-highlight--primary),
+                  0 0 13px oklch(from var(--c-highlight--primary) l c h / 0.6);
+    }
+    .alx-button.toggled { box-shadow: 0 0 11px oklch(from var(--c-highlight--primary) l c h / 0.55); }
+    .alx-button.primary {
+      font-weight: 600;
+      box-shadow: 0 0 15px oklch(from var(--c-highlight--primary) l c h / 0.5);
+    }
+    .alx-input, select.alx-input { height: 22px; border-radius: 5px; }
+    #play-btn { width: 26px; padding: 0; justify-content: center; }
+    #play-btn .ic { width: 14px; height: 14px; }
+
+    /* Square icon-only utility buttons (map / help / close) */
+    .icon-btn { width: 24px; padding: 0; justify-content: center; font-weight: 600; }
+    .icon-btn .ic { width: 15px; height: 15px; }
+    .close-btn { margin-left: 0.1em; }
+    .close-btn:hover { background: oklch(0.55 0.16 25); color: #fff; }
+
+    /* Settings panel */
+    .settings-panel {
+      inset: auto; top: 10px; right: 10px; width: 256px;
+      border-radius: 9px;
+      border: 1px solid oklch(from var(--c-control-border) calc(l * 2.2) c h);
+      box-shadow: 0 8px 28px rgba(0,0,0,0.6), 0 0 0 1px oklch(from var(--c-control-border) l c h / 0.4);
+      padding: 0.8em 0.85em 0.7em;
+      overflow: visible;
+      background: oklch(from var(--c-bg--0500) calc(l * 1.18) c h);
+    }
+    .settings-section { margin-bottom: 0.55em; }
+    .settings-section-title {
+      font-size: 0.76rem; letter-spacing: 0.05em; text-transform: uppercase;
+      color: var(--c-text-secondary); margin-bottom: 0.28em;
+    }
+    .settings-seg-row { display: flex; gap: 3px; }
+    .settings-seg-row .alx-button { flex: 1; justify-content: center; padding: 0; }
+    .settings-seg-row .alx-button.s-active {
+      background-color: var(--c-highlight--primary);
+      color: var(--c-control-on-foreground);
+      box-shadow: 0 0 10px oklch(from var(--c-highlight--primary) l c h / 0.4);
+    }
+
+    /* Segmented control — connected toggle group (used for Tool selector).
+       A recessed track holds one highlighted "pill" segment at a time. */
+    .seg {
+      display: inline-flex; align-items: center; gap: 2px; padding: 2px;
+      border-radius: 8px;
+      background: oklch(from var(--c-bg--0500) calc(l * 0.7) c h);
+      box-shadow: inset 0 1px 2px oklch(from var(--c-control-border) l c h / 0.9),
+                  inset 0 0 0 1px oklch(from var(--c-control-border) l c h / 0.6);
+    }
+    .seg .alx-button.tool {
+      height: 21px; width: 27px; padding: 0; border-radius: 5px; border: 0;
+      justify-content: center;
+      background: transparent; color: var(--c-text-secondary); box-shadow: none;
+    }
+    .seg .alx-button.tool:hover {
+      background: oklch(from var(--c-control-bg--500) calc(l * 1.18) c h);
+      color: var(--c-text-primary);
+    }
+    .seg .alx-button.tool:active { background: transparent; transform: none; }
+    .seg .alx-button.tool.active {
+      background: var(--c-highlight--primary);
+      color: var(--c-control-on-foreground);
+      box-shadow: 0 1px 2px oklch(from var(--c-control-border) l c h / 0.7),
+                  0 0 11px oklch(from var(--c-highlight--primary) l c h / 0.45);
+    }
+    .seg .alx-button.tool .ic { width: 14px; height: 14px; }
+
+    .legendbar {
+      padding: 0.45em 0.7em; gap: 0.6em;
+      background: oklch(from var(--c-bg--0500) calc(l * 0.93) c h);
+    }
+    .legend-key-label {
+      font-size: 0.82rem; letter-spacing: 0.05em; text-transform: uppercase;
+      color: var(--c-text-secondary); flex: 0 0 auto;
+    }
+    .legend-chip {
+      height: 23px; border-radius: 7px;
+      transition: box-shadow .16s ease, background-color .12s ease, transform .08s ease;
+    }
+    .legend-chip:hover { transform: translateY(-1px); }
+    .legend-chip .swatch { box-shadow: 0 0 6px currentColor; }
+    .legend-chip.current {
+      outline: 1px solid var(--c-highlight--primary); outline-offset: -1px;
+      animation: chipGlow 1.9s ease-in-out infinite;
+    }
+    @keyframes chipGlow {
+      0%, 100% { box-shadow: 0 0 0 0 oklch(from var(--c-highlight--primary) l c h / 0); }
+      50%      { box-shadow: 0 0 13px 1px oklch(from var(--c-highlight--primary) l c h / 0.6); }
+    }
+    /* live colour chip beside the articulation selector = the "active" brush */
+    .art-swatch {
+      width: 14px; height: 14px; border-radius: 4px; flex: 0 0 auto;
+      box-shadow: 0 0 8px currentColor; border: 1px solid oklch(from var(--c-control-border) l c h / 0.8);
+    }
+
+    /* Shortcuts cheat-sheet */
+    .overlay { background: oklch(from var(--c-bg--0500) l c h / 0.95); backdrop-filter: blur(4px); }
+    .overlay h1 { color: var(--c-text-primary); }
+    .cheat-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 0.1em 2.4em;
+      max-width: 760px; align-items: start;
+    }
+    .cheat-col h2 {
+      font-size: 0.95rem; color: var(--c-highlight--primary);
+      margin: 0.9em 0 0.35em; font-weight: 600; letter-spacing: 0.02em;
+    }
+    .cheat-row { display: flex; align-items: center; gap: 0.7em; padding: 0.18em 0; }
+    .cheat-row .keys { flex: 0 0 132px; display: flex; gap: 0.25em; flex-wrap: wrap; }
+    .cheat-row .desc { color: var(--c-text-primary); flex: 1; }
+    kbd {
+      font: inherit; font-size: 0.82rem; line-height: 1;
+      background: var(--c-input-bg-500); border: 1px solid var(--c-control-border);
+      border-bottom-width: 2px; border-radius: 5px; padding: 3px 6px;
+      color: var(--c-text-primary); white-space: nowrap;
+    }
+
+    /* Control-lane switcher — floats over the lower lane's gutter, like Ableton's
+       clip-envelope chooser. Positioned in JS (its y tracks the lane). */
+    .lane-switch {
+      position: absolute; z-index: 6; display: none; align-items: center; gap: 4px;
+      pointer-events: auto;
+    }
+    .lane-switch.show { display: inline-flex; }
+    .lane-switch select.alx-input {
+      height: 19px; border-radius: 5px; font-size: 0.92rem;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.45);
+    }
+    /* Divider between the chooser and the lane data it sits over — mirrors the
+       toolbar/context separators (--c-control-border) so the floating chooser
+       reads as a distinct control rather than bleeding into the envelope. */
+    .lane-switch .lane-sep {
+      align-self: stretch; width: 1px; margin: 2px 1px;
+      background: var(--c-control-border);
+      box-shadow: 1px 0 0 oklch(from var(--c-bg--0500) calc(l * 0.6) c h / 0.6);
+    }
   </style>
 </head>
 
 <body>
   <div class="toolbar">
     <span class="clip-name" id="clip-name">Clip</span>
-    <span class="preview-ind" id="preview-ind" title="Audible note preview. Needs the ArtRoll Preview device (Max MIDI Effect) on this track, before the instrument. Green = bridge connected.">● preview</span>
-    <button class="alx-button small" id="play-btn" title="Play (Space). With the ArtRoll Preview device on this track, this starts Live's real transport at the clip's position — you hear the whole arrangement, in sync. Without it, falls back to a software playhead that previews this clip only.">▶ Play</button>
-    <span class="preview-ind" id="sync-ind" title="Transport sync. Green = the ArtRoll Preview device is reporting Live's transport, so Play drives Live's REAL transport (whole arrangement, in sync). Grey = no device feedback, so Play falls back to a local single-clip playhead.">○ sync</span>
-    <button class="alx-button small tool" id="tool-mouse" title="Mouse: drag empty = select (Shift adds). Click empty = marker. Double-click empty = place + extend. Drag a note body = move (Option/Alt = off-grid). Drag a note edge = resize (Shift = uniform).">Mouse</button>
-    <button class="alx-button small tool" id="tool-pencil" title="Pencil (FL-style): click places a note; drag moves it (Option/Alt = off-grid). Shift while dragging extends. Hold E for Cut.">Pencil</button>
-    <button class="alx-button small tool" id="tool-cut" title="Cut: click/drag across notes to split (snaps to grid; hold Option/Alt for freehand). Shortcut: hold E.">Cut</button>
+
+    <span class="tgroup">
+      <button class="alx-button small" id="play-btn" title="Play (Space). With the ArtRoll Preview device on this track, this starts Live's real transport at the clip's position — you hear the whole arrangement, in sync. Without it, falls back to a software playhead that previews this clip only."><svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M4.5 2.8 13 8l-8.5 5.2z"/></svg></button>
+      <span class="preview-ind" id="preview-ind" title="Audible note preview. Needs the ArtRoll Preview device (Max MIDI Effect) on this track, before the instrument. Green = bridge connected.">● preview</span>
+      <span class="preview-ind" id="sync-ind" title="Transport sync. Green = the ArtRoll Preview device is reporting Live's transport, so Play drives Live's REAL transport (whole arrangement, in sync). Grey = no device feedback, so Play falls back to a local single-clip playhead.">○ sync</span>
+    </span>
+
+    <span class="tgroup">
+      <span class="glabel">Tools</span>
+      <span class="seg" role="group" aria-label="Tool">
+        <button class="alx-button small tool" id="tool-mouse" title="Mouse (A): drag empty = select (Shift adds). Click empty = marker. Double-click empty = place + extend. Drag a note body = move (Option/Alt = off-grid). Drag a note edge = resize (Shift = uniform).">
+          <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2.5l8.2 7-3.5.55 2.1 4-1.7.85-2.1-4.05L3.2 13.2z"/></svg></button>
+        <button class="alx-button small tool" id="tool-pencil" title="Pencil (B, FL-style): click places a note; drag moves it (Option/Alt = off-grid). Shift while dragging extends. Hold E for Cut.">
+          <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 2.2l3.3 3.3L5.5 13.8 2 14.8l1-3.5z"/><path d="M9.2 3.5l3.3 3.3"/></svg></button>
+        <button class="alx-button small tool" id="tool-cut" title="Cut (C): click/drag across notes to split (snaps to grid; hold Option/Alt for freehand). Shortcut: hold E.">
+          <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="4" cy="4" r="2"/><circle cx="4" cy="12" r="2"/><path d="M5.8 5.4L14 11.5M5.8 10.6L14 4.5"/></svg></button>
+        <button class="alx-button small tool" id="tool-brush" title="Brush: click or drag across notes to repaint with the current articulation.">
+          <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 2l2.5 2.5-7.5 7.5-3.5 0.5 0.5-3.5z"/><path d="M3 12.5 Q2 15 2 15 Q5 14 3.5 12 Z" fill="currentColor" stroke="none"/></svg></button>
+      </span>
+    </span>
+
+    <span class="tgroup">
+      <span class="glabel">Bank</span>
+      <select class="alx-input" id="bank-select" title="Articulation bank — pick the set built for this instrument (Strings, Brass, …). Switching banks swaps which articulations the legend, brush and 1–9 keys map to; it never changes notes you've already placed.">
+      </select>
+    </span>
+
+    <span class="tgroup">
+      <span class="glabel">Artic.</span>
+      <span class="art-swatch" id="art-swatch"></span>
+      <select class="alx-input" id="art-select" title="Articulation applied to NEW notes you place (and the paint/selector brushes). Does not change existing notes."></select>
+
+      <button class="alx-button small" id="scale-toggle" title="Snap to Scale: placed, transposed and dragged notes snap to Live's current scale.">Scale: off</button>
+    </span>
+
+    <span class="tgroup">
+      <span class="glabel">Grid</span>
+      <select class="alx-input" id="snap-select" title="Snap resolution for placement / moves. Ctrl/Cmd+1 finer, Ctrl/Cmd+2 coarser.">
+        <option value="4">1/1</option>
+        <option value="2">1/2</option>
+        <option value="1">1/4</option>
+        <option value="0.5">1/8</option>
+        <option value="0.25" selected>1/16</option>
+        <option value="0.125">1/32</option>
+        <option value="0">Off</option>
+      </select>
+      <button class="alx-button small" id="zoom-out" title="Zoom out (Ctrl/Cmd + scroll on the grid)">−</button>
+      <button class="alx-button small" id="zoom-in" title="Zoom in (Ctrl/Cmd + scroll on the grid)">+</button>
+    </span>
+
+    <span class="tgroup">
+      <span class="glabel">Colors</span>
+      <select class="alx-input" id="colors-select" title="Articulation colour scheme — the palette used to colour notes, the Key legend and the lanes. Independent of the visual Theme.">
+        <option value="Spectrum">Spectrum</option>
+        <option value="Vivid">Vivid</option>
+        <option value="Pastel">Pastel</option>
+      </select>
+    </span>
+
+    <span class="tgroup">
+      <span class="glabel">Theme</span>
+      <select class="alx-input" id="theme-select" title="Visual theme — explore the makeover directions. Functionality is identical across all themes.">
+        <option value="Studio">Studio</option>
+        <option value="Ableton+">Ableton+</option>
+        <option value="Warm">Warm</option>
+      </select>
+    </span>
+
     <span class="spacer"></span>
-    <label>Articulation</label>
-    <select class="alx-input" id="art-select"></select>
-    <button class="alx-button small" id="selector-toggle" title="Articulation Selector Mode: clicking a note converts it to the current articulation.">Art. select: off</button>
-    <button class="alx-button small" id="scale-toggle" title="Snap to Scale: placed, transposed and dragged notes snap to Live's current scale.">Scale: off</button>
-    <label>Snap</label>
-    <select class="alx-input" id="snap-select">
-      <option value="4">1/1</option>
-      <option value="2">1/2</option>
-      <option value="1">1/4</option>
-      <option value="0.5">1/8</option>
-      <option value="0.25" selected>1/16</option>
-      <option value="0.125">1/32</option>
-      <option value="0">Off</option>
-    </select>
-    <button class="alx-button small" id="zoom-out">−</button>
-    <button class="alx-button small" id="zoom-in">+</button>
-    <button class="alx-button small" id="edit-map">Edit map…</button>
-    <button class="alx-button" id="cancel-btn">Cancel</button>
-    <button class="alx-button primary" id="apply-btn">Apply</button>
+
+    <button class="alx-button small" id="dedupe-btn" title="Remove overlapping duplicate notes on the same pitch. Undoable.">Dedupe</button>
+    <button class="alx-button small" id="edit-map" title="Edit the articulation → keyswitch-pitch map.">Edit map…</button>
+    <button class="alx-button small" id="help-btn" title="Keyboard shortcuts & how-to (press ? )">? Help</button>
+    <button class="alx-button small icon-btn" id="settings-btn" title="Grid settings">
+      <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z"/></svg>
+    </button>
+
   </div>
 
   <div class="legendbar">
+    <span class="legend-key-label">Key</span>
     <div class="legend-chips" id="legend-chips"></div>
     <span class="legend-status" id="legend-status"></span>
   </div>
@@ -160,18 +423,44 @@
   <div class="stage">
     <canvas id="roll"></canvas>
 
+    <!-- Lower-lane chooser: note Velocity, or a MIDI CC automation envelope -->
+    <div class="lane-switch" id="lane-switch">
+      <select class="alx-input" id="lane-select" title="Lower lane — choose what it shows and edits: note Velocity, or a MIDI CC automation envelope. CC lanes: click to add a breakpoint and drag to shape it; double-click or right-click a point to remove it.">
+        <option value="velocity">Velocity</option>
+        <option value="cc1">CC 1 · Mod</option>
+        <option value="cc11">CC 11 · Expression</option>
+        <option value="cc2">CC 2 · Breath</option>
+      </select>
+      <span class="lane-sep" aria-hidden="true"></span>
+    </div>
+
     <!-- Inline articulation-map editor -->
     <div class="overlay" id="map-overlay">
-      <h1>Edit articulation map</h1>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6em;">
+        <h1>Edit articulation map</h1>
+        <button class="alx-button small icon-btn close-btn" id="map-close" title="Close (Esc)">
+          <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l10 10M13 3L3 13"/></svg>
+        </button>
+      </div>
       <p class="muted">Re-pitch these to match your instrument's keyswitch range. Saving reopens the roll.</p>
-      <table>
-        <thead>
-          <tr><th>Articulation</th><th>Pitch</th><th>Note</th><th>Hold</th><th></th></tr>
-        </thead>
-        <tbody id="map-rows"></tbody>
-      </table>
-      <div class="buttons" style="margin-top:0.5em;">
+      <div style="display:flex;gap:0.4em;margin-bottom:6px;align-items:center;">
         <button class="alx-button small" id="map-add">+ Add</button>
+        <button class="alx-button small" id="map-autopitch" title="Set each pitch to: first pitch + row index (sequential from top)">Auto-pitch ↓</button>
+        <span style="flex:1"></span>
+        <span id="map-sel-count" class="hint" style="font-variant-numeric:tabular-nums;"></span>
+        <button class="alx-button small" id="map-selall" title="Select / clear all rows">Select all</button>
+        <button class="alx-button small" id="map-delsel" title="Delete the highlighted articulations (click a row to select · Shift-click for a range · ⌘/Ctrl-click to toggle)">Delete selected</button>
+      </div>
+      <div id="map-columns" style="display:flex;gap:1.6em;align-items:flex-start;flex-wrap:wrap;"></div>
+      <!-- Keyswitch keyboard visualiser -->
+      <div style="margin:0.75em 0 0.45em;">
+        <div style="font-size:0.76rem;letter-spacing:0.05em;text-transform:uppercase;color:var(--c-text-secondary);margin-bottom:0.3em;">Keyswitch positions</div>
+        <div id="map-kb-scroll" style="overflow-x:auto;overflow-y:hidden;border:1px solid var(--c-control-border);border-radius:5px;background:#0d0d0d;user-select:none;">
+          <canvas id="map-keyboard" style="display:block;"></canvas>
+        </div>
+        <div style="font-size:0.72rem;color:var(--c-text-secondary);margin-top:0.28em;">Hover for pitch · click highlighted key to focus its row</div>
+      </div>
+      <div class="buttons" style="margin-top:0.5em;">
         <span class="spacer"></span>
         <button class="alx-button" id="map-cancel">Back</button>
         <button class="alx-button primary" id="map-save">Save</button>
@@ -180,11 +469,179 @@
 
     <!-- Right-click context menu (notes + lane spans) -->
     <div class="ctx-menu" id="ctx-menu"></div>
+
+    <!-- Shortcuts cheat-sheet -->
+    <div class="overlay" id="help-overlay">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6em;">
+        <h1>Shortcuts &amp; how-to</h1>
+        <button class="alx-button small icon-btn close-btn" id="help-close" title="Close (Esc)">
+          <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l10 10M13 3L3 13"/></svg>
+        </button>
+      </div>
+      <p class="muted">Everything here also works from the toolbar. Press <kbd>?</kbd> or <kbd>Esc</kbd> to close.</p>
+      <div class="cheat-grid">
+        <div class="cheat-col">
+          <h2>Tools</h2>
+          <div class="cheat-row"><span class="keys"><kbd>A</kbd></span><span class="desc">Mouse tool (select / move / resize)</span></div>
+          <div class="cheat-row"><span class="keys"><kbd>B</kbd></span><span class="desc">Pencil tool (click to draw)</span></div>
+          <div class="cheat-row"><span class="keys"><kbd>C</kbd></span><span class="desc">Cut tool (slice notes)</span></div>
+          <div class="cheat-row"><span class="keys"><kbd>E</kbd></span><span class="desc">Hold for temporary Cut</span></div>
+          <div class="cheat-row"><span class="keys"><kbd>Space</kbd></span><span class="desc">Play / stop</span></div>
+
+          <h2>Placing &amp; editing</h2>
+          <div class="cheat-row"><span class="keys"><kbd>2×click</kbd></span><span class="desc">Place a note + drag to extend</span></div>
+          <div class="cheat-row"><span class="keys"><kbd>Drag</kbd></span><span class="desc">Move selection · edge = resize</span></div>
+          <div class="cheat-row"><span class="keys"><kbd>⌥</kbd> drag</span><span class="desc">Move/cut off-grid (freehand)</span></div>
+          <div class="cheat-row"><span class="keys"><kbd>Del</kbd></span><span class="desc">Delete selected notes</span></div>
+          <div class="cheat-row"><span class="keys"><kbd>L</kbd></span><span class="desc">Legato (stretch to next note)</span></div>
+        </div>
+        <div class="cheat-col">
+          <h2>Selection</h2>
+          <div class="cheat-row"><span class="keys"><kbd>⌘</kbd><kbd>A</kbd></span><span class="desc">Select all</span></div>
+          <div class="cheat-row"><span class="keys"><kbd>⇧</kbd> click</span><span class="desc">Add to / extend selection</span></div>
+          <div class="cheat-row"><span class="keys"><kbd>⌘</kbd> drag</span><span class="desc">Marquee select</span></div>
+          <div class="cheat-row"><span class="keys"><kbd>←</kbd><kbd>→</kbd></span><span class="desc">Nudge by grid</span></div>
+          <div class="cheat-row"><span class="keys"><kbd>⇧</kbd><kbd>←</kbd><kbd>→</kbd></span><span class="desc">Shrink / extend note length by grid</span></div>
+          <div class="cheat-row"><span class="keys"><kbd>↑</kbd><kbd>↓</kbd></span><span class="desc">Transpose (⇧ = octave)</span></div>
+
+          <h2>Articulation &amp; grid</h2>
+          <div class="cheat-row"><span class="keys"><kbd>1</kbd>–<kbd>9</kbd></span><span class="desc">Set selected notes' articulation</span></div>
+          <div class="cheat-row"><span class="keys"><kbd>0</kbd></span><span class="desc">Deactivate / mute selected</span></div>
+          <div class="cheat-row"><span class="keys"><kbd>⌘</kbd><kbd>1</kbd>/<kbd>2</kbd></span><span class="desc">Grid finer / coarser</span></div>
+          <div class="cheat-row"><span class="keys"><kbd>⌘</kbd><kbd>C</kbd>/<kbd>V</kbd>/<kbd>D</kbd></span><span class="desc">Copy / paste / duplicate</span></div>
+          <div class="cheat-row"><span class="keys"><kbd>⌘</kbd><kbd>Z</kbd></span><span class="desc">Undo · <kbd>⇧</kbd> = redo</span></div>
+
+          <h2>Lower lane</h2>
+          <div class="cheat-row"><span class="keys"><kbd>Lane ▾</kbd></span><span class="desc">Switch: note Velocity ⇄ CC envelope</span></div>
+          <div class="cheat-row"><span class="keys"><kbd>Click</kbd></span><span class="desc">CC: add a breakpoint · drag to shape</span></div>
+          <div class="cheat-row"><span class="keys"><kbd>2×click</kbd></span><span class="desc">CC: delete a breakpoint (or right-click)</span></div>
+        </div>
+      </div>
+      <div class="buttons" style="max-width:760px;">
+        <span class="hint">Tip: the colour <b>Key</b> bar below the toolbar — click a chip to select every note of that articulation.</span>
+      </div>
+    </div>
+
+    <!-- Grid settings panel -->
+    <div class="overlay settings-panel" id="settings-overlay">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6em;">
+        <h1>Grid settings</h1>
+        <button class="alx-button small icon-btn close-btn" id="settings-close" title="Close (Esc)">
+          <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l10 10M13 3L3 13"/></svg>
+        </button>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Row height</div>
+        <div class="settings-seg-row" id="row-height-seg">
+          <button class="alx-button small" data-val="12">Compact</button>
+          <button class="alx-button small" data-val="16">Normal</button>
+          <button class="alx-button small" data-val="20">Tall</button>
+          <button class="alx-button small" data-val="24">XL</button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Piano keys</div>
+        <div class="settings-seg-row" id="piano-width-seg">
+          <button class="alx-button small" data-val="28">Narrow</button>
+          <button class="alx-button small" data-val="44">Normal</button>
+          <button class="alx-button small" data-val="60">Wide</button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Control lane</div>
+        <div class="settings-seg-row" id="vel-lane-seg">
+          <button class="alx-button small" data-val="0">Hidden</button>
+          <button class="alx-button small" data-val="40">Compact</button>
+          <button class="alx-button small" data-val="56">Normal</button>
+          <button class="alx-button small" data-val="80">Tall</button>
+        </div>
+      </div>
+
+      <div style="margin-top:0.65em;display:flex;justify-content:flex-end;">
+        <button class="alx-button small" id="settings-reset">Reset defaults</button>
+      </div>
+    </div>
   </div>
 
   <script>
     // ---- Injected by the host before the dialog opens ----
-    const DATA = [/*__DATA__*/];
+    // The host string-replaces the token below with JSON.stringify(payload) — see
+    // extension.ts (rollHtml.replace of the DATA token). NOTE: the literal token must
+    // appear exactly once in this file, on the HOST_DATA line, because the host
+    // replaces only its first occurrence — do not repeat it in comments above.
+    // In a plain browser the token is left intact and evaluates to an empty array,
+    // so we detect that case
+    // (Array, not the object payload) and fall back to a baked standalone-preview
+    // default. The fallback shape matches buildPayload()'s RollPayload. The
+    // preview/transport bridge (127.0.0.1:7475) is absent in the browser, so those
+    // calls silently no-op — every editing interaction otherwise works as in Live.
+    const HOST_DATA = [/*__DATA__*/];
+    const DATA = (HOST_DATA && !Array.isArray(HOST_DATA)) ? HOST_DATA : {
+      schema: "1.1.0",
+      clip: { name: "Violin — Theme A", startTime: 0, duration: 16, looping: true, loopStart: 0, loopEnd: 16 },
+      grid: { snap: 0.25, default: 0.5 },
+      tempo: 104,
+      scale: { root: 0, intervals: [0, 2, 4, 5, 7, 9, 11], name: "C Major", mode: false },
+      articulations: [
+        { name: "Sustain", pitch: 0 },
+        { name: "Staccato", pitch: 1 },
+        { name: "Pizzicato", pitch: 2 },
+        { name: "Legato", pitch: 3 },
+        { name: "Tremolo", pitch: 4 },
+        { name: "Trill C Maj", pitch: 5 },
+      ],
+      // Articulation banks — one set per instrument. The selector in the toolbar
+      // swaps the active set; the first bank mirrors `articulations` above so the
+      // host contract (which reads `articulations`) is unchanged. Pitches are
+      // keyswitch pitches the host re-maps to the instrument's real KS range.
+      banks: [
+        { name: "Strings — Violin", articulations: [
+          { name: "Sustain", pitch: 0 }, { name: "Staccato", pitch: 1 },
+          { name: "Pizzicato", pitch: 2 }, { name: "Legato", pitch: 3 },
+          { name: "Tremolo", pitch: 4, hold: true }, { name: "Trill C Maj", pitch: 5, hold: true },
+        ] },
+        { name: "Brass — Horn", articulations: [
+          { name: "Sustain", pitch: 0 }, { name: "Legato", pitch: 1 },
+          { name: "Staccato", pitch: 2 }, { name: "Marcato", pitch: 3 },
+          { name: "Sforzando", pitch: 4 }, { name: "Muted", pitch: 5 },
+          { name: "Fall", pitch: 6 }, { name: "Flutter", pitch: 7, hold: true },
+        ] },
+        { name: "Woodwinds — Flute", articulations: [
+          { name: "Sustain", pitch: 0 }, { name: "Legato", pitch: 1 },
+          { name: "Staccato", pitch: 2 }, { name: "Trill", pitch: 3, hold: true },
+          { name: "Flutter", pitch: 4, hold: true }, { name: "Grace", pitch: 5 },
+          { name: "Tremolo", pitch: 6, hold: true },
+        ] },
+        { name: "Keys / Generic", articulations: [
+          { name: "Sustain", pitch: 0 }, { name: "Staccato", pitch: 1 },
+        ] },
+      ],
+      notes: [
+        // Bar 1 — sustained opening
+        { id: 0, pitch: 67, startTime: 0,    duration: 1,   velocity: 92,  art: "Sustain" },
+        { id: 1, pitch: 69, startTime: 1,    duration: 1,   velocity: 86,  art: "Sustain" },
+        { id: 2, pitch: 71, startTime: 2,    duration: 2,   velocity: 104, art: "Sustain" },
+        // Bar 2 — staccato figure resolving to a sustain
+        { id: 3, pitch: 72, startTime: 4,    duration: 0.5, velocity: 112, art: "Staccato" },
+        { id: 4, pitch: 71, startTime: 4.5,  duration: 0.5, velocity: 96,  art: "Staccato" },
+        { id: 5, pitch: 72, startTime: 5,    duration: 0.5, velocity: 108, art: "Staccato" },
+        { id: 6, pitch: 74, startTime: 5.5,  duration: 0.5, velocity: 100, art: "Staccato" },
+        { id: 7, pitch: 76, startTime: 6,    duration: 2,   velocity: 118, art: "Sustain" },
+        // Bar 3 — pizzicato run into a trill peak
+        { id: 8,  pitch: 72, startTime: 8,    duration: 0.25, velocity: 78, art: "Pizzicato" },
+        { id: 9,  pitch: 74, startTime: 8.5,  duration: 0.25, velocity: 84, art: "Pizzicato" },
+        { id: 10, pitch: 76, startTime: 9,    duration: 0.25, velocity: 90, art: "Pizzicato" },
+        { id: 11, pitch: 77, startTime: 9.5,  duration: 0.25, velocity: 96, art: "Pizzicato" },
+        { id: 12, pitch: 79, startTime: 10,   duration: 2,    velocity: 124, art: "Trill C Maj" },
+        // Bar 4 — legato descent + tremolo resolve (one deactivated note to show the muted state)
+        { id: 13, pitch: 76, startTime: 12,   duration: 1,  velocity: 100, art: "Legato" },
+        { id: 14, pitch: 74, startTime: 13,   duration: 1,  velocity: 90,  art: "Legato", muted: true },
+        { id: 15, pitch: 72, startTime: 14,   duration: 2,  velocity: 106, art: "Tremolo" },
+      ],
+    };
 
     const isWebKit = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.live;
     const isWebView2 = window.chrome && window.chrome.webview;
@@ -257,7 +714,128 @@
       const { ksPitch, ksHold } = pvKsFor(n, PV_DUR_MS);
       const vel = typeof n.velocity === "number" ? n.velocity : 100;
       pvSend(n.pitch, vel, PV_DUR_MS, ksPitch, ksHold);
+      DEMO_SAMPLER.play(n.art, n.pitch, vel, PV_DUR_MS); // DEMO-ONLY (see block below)
     }
+
+    /* ====================================================================== *
+     * DEMO-ONLY — standalone audio preview. NOT part of the shipping device.  *
+     * Lets you drop an audio file onto each articulation chip and actually    *
+     * HEAR it: notes are pitch-shifted via playback rate, velocity controls   *
+     * volume, and samples persist in the browser (IndexedDB). In Live the     *
+     * real bridge makes the sound, so this never runs there. To remove the    *
+     * feature, delete this block plus the two `DEMO_SAMPLER` / `DEMO:` call   *
+     * sites marked elsewhere in this file.                                    *
+     * ====================================================================== */
+    const DEMO_SAMPLER = (() => {
+      let actx = null;
+      const buffers = new Map();         // artName -> [{root, buffer}, ...] octave zones
+      const DROP_ROOT = 65;              // a user-dropped override is assumed near F4
+      const DB = "artroll-demo-samples", STORE = "samples";
+      // Pick the best zone for the played pitch. Prefer a zone of the SAME pitch
+      // class within an octave (clean octave shift, e.g. C4 from the C3 sample)
+      // over a closer-but-detuned neighbour; otherwise fall back to nearest root.
+      function nearestZone(zones, pitch) {
+        let octave = null;
+        for (const z of zones) {
+          if (((z.root - pitch) % 12 + 12) % 12 === 0 && Math.abs(z.root - pitch) <= 12) {
+            if (!octave || Math.abs(z.root - pitch) < Math.abs(octave.root - pitch)) octave = z;
+          }
+        }
+        if (octave) return octave;
+        let best = zones[0];
+        for (const z of zones) if (Math.abs(z.root - pitch) < Math.abs(best.root - pitch)) best = z;
+        return best;
+      }
+      function ctx() {
+        if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+        if (actx.state === "suspended") actx.resume();
+        return actx;
+      }
+      function play(artName, pitch, vel, durMs) {
+        const zones = artName ? buffers.get(artName) : null;
+        if (!zones || !zones.length) return false;
+        const z = nearestZone(zones, pitch);
+        const c = ctx();
+        const src = c.createBufferSource();
+        src.buffer = z.buffer;
+        src.playbackRate.value = Math.pow(2, (pitch - z.root) / 12); // shift from nearest zone
+        const g = c.createGain();
+        const v = Math.max(1, Math.min(127, vel || 100)) / 127;
+        const now = c.currentTime, dur = Math.max(0.05, (durMs || 250) / 1000);
+        const REL = 0.6;                // release tail — let the sample ring out
+        g.gain.value = v * v;            // perceptual-ish velocity curve
+        g.gain.setValueAtTime(g.gain.value, now + dur);
+        g.gain.exponentialRampToValueAtTime(0.0008, now + dur + REL); // smooth decay
+        g.gain.linearRampToValueAtTime(0, now + dur + REL + 0.02);    // declick to silence
+        src.connect(g).connect(c.destination);
+        src.start(now);
+        src.stop(now + dur + REL + 0.05);
+        return true;
+      }
+      const has = artName => buffers.has(artName);
+      // Bundled demo multisamples (uploads/). Each articulation has C3/F3/F4/F5
+      // takes; the engine pitch-shifts from the best zone.
+      const DEFAULTS = {
+        "Sustain":     [["uploads/Sustain.wav", 60], ["uploads/Sustain F3.wav", 65], ["uploads/Sustain [2026-06-24 183436] F4.wav", 77], ["uploads/Sustain [2026-06-24 183445] F5.wav", 89]],
+        "Staccato":    [["uploads/Staccato.wav", 60], ["uploads/Staccato F3.wav", 65], ["uploads/Staccato [2026-06-24 183437] F4.wav", 77], ["uploads/Staccato [2026-06-24 183447] F5.wav", 89]],
+        "Pizzicato":   [["uploads/Pizzicato.wav", 60], ["uploads/Pizzicato F3.wav", 65], ["uploads/Pizzicato [2026-06-24 183439] F4.wav", 77], ["uploads/Pizzicato [2026-06-24 183448] F5.wav", 89]],
+        "Legato":      [["uploads/Legato.wav", 60], ["uploads/Legato F3.wav", 65], ["uploads/Legato [2026-06-24 183440] F4.wav", 77], ["uploads/Legato [2026-06-24 183450] F5.wav", 89]],
+        "Tremolo":     [["uploads/Tremolo.wav", 60], ["uploads/Tremolo F3.wav", 65], ["uploads/Tremolo [2026-06-24 183442] F4.wav", 77], ["uploads/Tremolo [2026-06-24 183451] F5.wav", 89]],
+        "Trill C Maj": [["uploads/Trill.wav", 60], ["uploads/Trill F3.wav", 65], ["uploads/Trill [2026-06-24 183443] F4.wav", 77], ["uploads/Trill [2026-06-24 183453] F5.wav", 89]],
+        // Aliases — articulations without their own recordings reuse the closest
+        // bundled sample so every chip in every bank makes a sound.
+        "Trill":       [["uploads/Trill.wav", 60], ["uploads/Trill F3.wav", 65], ["uploads/Trill [2026-06-24 183443] F4.wav", 77], ["uploads/Trill [2026-06-24 183453] F5.wav", 89]],
+        "Spiccato":    [["uploads/Staccato.wav", 60], ["uploads/Staccato F3.wav", 65], ["uploads/Staccato [2026-06-24 183437] F4.wav", 77], ["uploads/Staccato [2026-06-24 183447] F5.wav", 89]],
+        "Marcato":     [["uploads/Sustain.wav", 60], ["uploads/Sustain F3.wav", 65], ["uploads/Sustain [2026-06-24 183436] F4.wav", 77], ["uploads/Sustain [2026-06-24 183445] F5.wav", 89]],
+        "Sforzando":   [["uploads/Sustain.wav", 60], ["uploads/Sustain F3.wav", 65], ["uploads/Sustain [2026-06-24 183436] F4.wav", 77], ["uploads/Sustain [2026-06-24 183445] F5.wav", 89]],
+        "Muted":       [["uploads/Pizzicato.wav", 60], ["uploads/Pizzicato F3.wav", 65], ["uploads/Pizzicato [2026-06-24 183439] F4.wav", 77], ["uploads/Pizzicato [2026-06-24 183448] F5.wav", 89]],
+        "Fall":        [["uploads/Staccato.wav", 60], ["uploads/Staccato F3.wav", 65], ["uploads/Staccato [2026-06-24 183437] F4.wav", 77], ["uploads/Staccato [2026-06-24 183447] F5.wav", 89]],
+        "Flutter":     [["uploads/Tremolo.wav", 60], ["uploads/Tremolo F3.wav", 65], ["uploads/Tremolo [2026-06-24 183442] F4.wav", 77], ["uploads/Tremolo [2026-06-24 183451] F5.wav", 89]],
+        "Grace":       [["uploads/Staccato.wav", 60], ["uploads/Staccato F3.wav", 65], ["uploads/Staccato [2026-06-24 183437] F4.wav", 77], ["uploads/Staccato [2026-06-24 183447] F5.wav", 89]],
+      };
+      async function loadDefaults() {
+        for (const [name, zones] of Object.entries(DEFAULTS)) {
+          if (buffers.has(name)) continue; // user-dropped / persisted sample wins
+          const loaded = [];
+          for (const [url, root] of zones) {
+            try {
+              const arr = await (await fetch(encodeURI(url))).arrayBuffer();
+              loaded.push({ root, buffer: await ctx().decodeAudioData(arr.slice(0)) });
+            } catch (_) {}
+          }
+          if (loaded.length) buffers.set(name, loaded);
+        }
+      }
+      function db() {
+        return new Promise((res, rej) => {
+          const r = indexedDB.open(DB, 1);
+          r.onupgradeneeded = () => r.result.createObjectStore(STORE);
+          r.onsuccess = () => res(r.result);
+          r.onerror = () => rej(r.error);
+        });
+      }
+      async function set(artName, blob) {
+        const arr = await blob.arrayBuffer();
+        // a dropped override replaces all zones with one (assumed near F4)
+        buffers.set(artName, [{ root: DROP_ROOT, buffer: await ctx().decodeAudioData(arr.slice(0)) }]);
+        try { const d = await db(); d.transaction(STORE, "readwrite").objectStore(STORE).put(blob, artName); } catch (_) {}
+      }
+      async function clear(artName) {
+        buffers.delete(artName);
+        try { const d = await db(); d.transaction(STORE, "readwrite").objectStore(STORE).delete(artName); } catch (_) {}
+      }
+      async function loadAll() {
+        let d; try { d = await db(); } catch (_) { return; }
+        const store = d.transaction(STORE, "readonly").objectStore(STORE);
+        const ks = store.getAllKeys(), vs = store.getAll();
+        await new Promise(r => { store.transaction.oncomplete = r; store.transaction.onerror = r; });
+        const keys = ks.result || [], vals = vs.result || [];
+        for (let i = 0; i < keys.length; i++) {
+          try { const arr = await vals[i].arrayBuffer(); buffers.set(keys[i], [{ root: DROP_ROOT, buffer: await ctx().decodeAudioData(arr.slice(0)) }]); } catch (_) {}
+        }
+      }
+      return { play, has, set, clear, loadAll, loadDefaults };
+    })();
     pvConnect();
     setInterval(updateSyncInd, 400);
 
@@ -281,6 +859,8 @@
     // Clip's arrangement start (beats). Live reports global song time; subtract
     // this to place the playhead in clip-local coordinates.
     const CLIP_START = (DATA.clip && typeof DATA.clip.startTime === "number") ? DATA.clip.startTime : 0;
+    // Declared up here (not in State below) because the transport block references it.
+    const clipDuration = Math.max(0.25, DATA.clip.duration || 4);
     // Loop region (clip-local beats). Host sends the clip's loop; fall back to the
     // whole clip if it's absent or degenerate. LOOPING mirrors the clip's toggle.
     const LOOPING = !!(DATA.clip && DATA.clip.looping);
@@ -324,7 +904,9 @@
     function updatePlayBtn() {
       const b = document.getElementById("play-btn");
       if (!b) return;
-      b.textContent = playing ? "■ Stop" : "▶ Play";
+      b.innerHTML = playing
+        ? '<svg class="ic" viewBox="0 0 16 16" fill="currentColor"><rect x="3.5" y="3.5" width="9" height="9" rx="1"/></svg>'
+        : '<svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M4.5 2.8 13 8l-8.5 5.2z"/></svg>';
       b.classList.toggle("primary", playing);
     }
     function stopPlayback() {
@@ -368,7 +950,7 @@
         const durMs = Math.max(20, playableBeats * SEC_PER_BEAT * 1000);
         const vel = typeof n.velocity === "number" ? n.velocity : 100;
         const { ksPitch, ksHold } = pvKsFor(n, durMs);
-        playTimers.push(setTimeout(() => pvSend(n.pitch, vel, durMs, ksPitch, ksHold), delayMs));
+        playTimers.push(setTimeout(() => { pvSend(n.pitch, vel, durMs, ksPitch, ksHold); DEMO_SAMPLER.play(n.art, n.pitch, vel, durMs); }, delayMs)); // DEMO-ONLY audio preview
       }
       // at window end: loop (restart at LOOP_START) or stop, a hair late
       const spanMs = (end - fromBeat) * SEC_PER_BEAT * 1000;
@@ -426,16 +1008,36 @@
     }
 
     // ---- Layout constants ----
-    const GUTTER = 44, RULER = 22, LANE = 48;
-    const ROW_H = 12, MIN_PPB = 8, MAX_PPB = 400;
+    const RULER = 22, LANE = 48;
+    let GUTTER = 44;               // piano key column width — user-settable
+    let ROW_H = 16;                // pitch row height — user-settable
+    const MIN_PPB = 8, MAX_PPB = 400;
     const BEATS_PER_BAR = 4;           // display default (4/4)
-    const EDGE = 6;                    // px hot-zone for the resize handle
-    const VEL_LANE = 56;               // velocity lane height (px), between grid and artic lane
+    const EDGE = 8;                    // px hot-zone for the resize handle
+    const LANE_GRAB = 5;               // px hot-zone for dragging the lane's top border
+    const laneMinH = () => 32;
+    const laneMaxH = () => Math.max(40, viewH - RULER - LANE - 90);
+    let VEL_LANE = 56;                 // velocity lane height — user-settable (0 = hidden)
     const BOTTOM = () => LANE + VEL_LANE; // bottom chrome below the grid (vel + artic lanes)
+    // Restore persisted grid settings before the first resize()
+    (function() {
+      try {
+        const _s = JSON.parse(localStorage.getItem("artroll-grid-v1") || "{}");
+        if (_s.rowH > 0) ROW_H = _s.rowH;
+        if (_s.gutter > 0) GUTTER = _s.gutter;
+        if (typeof _s.velLane === "number") VEL_LANE = _s.velLane;
+      } catch(e) {}
+    })();
 
     // ---- State ----
-    const clipDuration = Math.max(0.25, DATA.clip.duration || 4);
-    let artMap = (DATA.articulations || []).map(a => ({ ...a }));
+    // (clipDuration is declared above, near CLIP_START, for the transport block.)
+    // Articulation banks: prefer DATA.banks; otherwise wrap the flat list as one bank.
+    let banks = (DATA.banks && DATA.banks.length)
+      ? DATA.banks.map(b => ({ name: b.name, articulations: (b.articulations || []).map(a => ({ ...a })) }))
+      : [{ name: DATA.clip.name || "Default", articulations: (DATA.articulations || []).map(a => ({ ...a })) }];
+    let currentBank = 0;
+    let _colorCounter = 0;
+    let artMap = banks[currentBank].articulations.map(a => ({ ...a, _colorIdx: _colorCounter++ }));
     let snap = DATA.grid && DATA.grid.snap != null ? DATA.grid.snap : 0.25;
     let lastLength = DATA.grid && DATA.grid.default ? DATA.grid.default : 0.25;
     let currentArt = artMap.length ? artMap[0].name : null;
@@ -484,15 +1086,67 @@
     let marker = null;                     // insert-marker beat (mouse tool), or null
     let tool = "mouse";                    // "mouse" | "pencil" | "cut"
     let eHeldPrevTool = null;              // tool to restore when the held E key is released
-    let selectorMode = false;              // Articulation Selector Mode (click converts note)
+
     let undoStack = [], redoStack = [];
     let previewPaint = null;               // in-progress lane paint {s, e}
     let pxPerBeat = 64;                    // set to fit in init()
     let scrollX = 0, scrollY = 0;          // content offsets (px)
 
+    // ---- Control-lane mode + CC automation envelopes (Phase 1) ----
+    // The lower lane is switchable: "velocity" (per-note stems, as before) or a
+    // MIDI CC envelope. A CC envelope is a breakpoint list over clip time (beats),
+    // value 0-127, kept sorted by t. Editing adds / drags / deletes breakpoints;
+    // undo and live-apply carry the envelopes alongside the notes.
+    const CC_LANES = {
+      cc1:  { cc: 1,  label: "CC 1",  name: "Mod" },
+      cc11: { cc: 11, label: "CC 11", name: "Expression" },
+      cc2:  { cc: 2,  label: "CC 2",  name: "Breath" },
+    };
+    let laneMode = "velocity";              // "velocity" | "cc1" | "cc11" | "cc2"
+    let ccEnvelopes = {                     // lane id -> [{t, v}] (sorted by t)
+      // All lanes start empty — breakpoints only appear once the user clicks them in.
+      cc1: [],
+      cc11: [],
+      cc2: [],
+    };
+    const ccPoints = id => (ccEnvelopes[id] || (ccEnvelopes[id] = []));
+    const sortCC = id => ccPoints(id).sort((a, b) => a.t - b.t);
+
+    // ---- Makeover: motion + glow state (cosmetic only) ----
+    let hoverKey = null;                   // note _key under the cursor (mouse tool, no drag)
+    const dying = [];                      // fading-out copies of just-deleted notes {…, t0}
+    const BORN_MS = 220, DIE_MS = 260;     // add / delete fade durations
+    let animRAF = 0;
+    function anyBorn() {
+      const now = performance.now();
+      for (const n of notes) if (n._born && now - n._born < BORN_MS) return true;
+      return false;
+    }
+    function needsAnim() { return dying.length > 0 || anyBorn(); }
+    function startAnim() {
+      if (animRAF) return;
+      const loop = () => {
+        if (needsAnim()) { requestDraw(); animRAF = requestAnimationFrame(loop); }
+        else animRAF = 0;
+      };
+      animRAF = requestAnimationFrame(loop);
+    }
+    // Snapshot soon-to-be-deleted notes so they can fade out after removal.
+    function markDying(keys) {
+      const now = performance.now();
+      const set = new Set(keys);
+      for (const n of notes) {
+        if (set.has(n._key) && !n.muted) {
+          dying.push({ pitch: n.pitch, startTime: n.startTime, duration: n.duration,
+            velocity: n.velocity, art: n.art, t0: now });
+        }
+      }
+      startAnim();
+    }
+
     // ---- Undo / redo (snapshot stack) ----
     const UNDO_MAX = 100;
-    const snapState = () => ({ notes: notes.map(n => ({ ...n })), marker });
+    const snapState = () => ({ notes: notes.map(n => ({ ...n })), marker, cc: JSON.parse(JSON.stringify(ccEnvelopes)) });
     function pushUndoState(s) {
       undoStack.push(s);
       if (undoStack.length > UNDO_MAX) undoStack.shift();
@@ -503,6 +1157,7 @@
     function restoreState(s) {
       notes = s.notes.map(n => ({ ...n }));
       marker = s.marker;
+      if (s.cc) ccEnvelopes = JSON.parse(JSON.stringify(s.cc));
       selection = new Set([...selection].filter(k => notes.some(n => n._key === k)));
       requestDraw();
       scheduleLiveApply(); // in-editor undo/redo also follows through to the clip
@@ -529,7 +1184,7 @@
         fetch("http://127.0.0.1:" + PV_PORT + "/apply", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ notes: serializeNotes() }),
+          body: JSON.stringify({ notes: serializeNotes(), cc: ccEnvelopes }),
           keepalive: true, // let the final flush survive modal teardown on cancel
         }).catch(() => {});
       } catch (_) { /* bridge absent */ }
@@ -593,6 +1248,7 @@
       canvas.height = Math.round(viewH * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       clampScroll();
+      positionLaneSwitch();
       requestDraw();
     }
 
@@ -621,12 +1277,58 @@
     const velUsableH = () => Math.max(8, velBaseline() - velTopY());
     const velToY = v => velBaseline() - (Math.max(1, Math.min(127, v)) / 127) * velUsableH();
     const yToVel = y => Math.max(1, Math.min(127, Math.round((velBaseline() - y) / velUsableH() * 127)));
+    // CC envelope geometry — shares the control-lane region (value floor is 0).
+    const ccValToY = v => velBaseline() - (Math.max(0, Math.min(127, v)) / 127) * velUsableH();
+    const ccYToVal = y => Math.max(0, Math.min(127, Math.round((velBaseline() - y) / velUsableH() * 127)));
 
     // ---- Articulation colors ----
+    // Color SCHEMES for the articulation palette — independent of the UI Theme.
+    //  • "Spectrum" mirrors the original device/editor formula, hsl((i*47)%360 …),
+    //    the evenly-rotated rainbow used before the makeover.
+    //  • "Vivid" is the curated, perceptually-even oklch set introduced here.
+    //  • "Pastel" is a softer, lower-chroma oklch set.
+    // Each is a function (i, alpha) -> css color string.
+    const VIVID_PALETTE = [
+      [65, 0.19,  25],  // coral
+      [65, 0.18, 255],  // blue
+      [68, 0.17, 145],  // mint
+      [67, 0.19,  55],  // amber
+      [58, 0.17, 305],  // violet
+      [67, 0.17, 185],  // teal
+      [65, 0.20,   5],  // red
+      [62, 0.16, 230],  // sky
+      [70, 0.17,  90],  // lime
+      [60, 0.18, 330],  // pink
+      [64, 0.15, 200],  // cyan
+      [72, 0.15,  70],  // gold
+    ];
+    const PASTEL_PALETTE = [
+      [80, 0.09,  25], [80, 0.09, 255], [82, 0.08, 145], [81, 0.10,  55],
+      [76, 0.09, 305], [81, 0.09, 185], [79, 0.10,   5], [77, 0.08, 230],
+      [83, 0.09,  90], [77, 0.09, 330], [80, 0.08, 200], [84, 0.08,  70],
+    ];
+    const okFromList = list => (i, alpha) => {
+      const [l, c, h] = list[i % list.length];
+      return `oklch(${l}% ${c} ${h} / ${alpha == null ? 1 : alpha})`;
+    };
+    const COLOR_SCHEMES = {
+      // the colours from before — evenly-rotated rainbow
+      Spectrum: (i, alpha) => `hsl(${(i * 47) % 360} 70% 55% / ${alpha == null ? 1 : alpha})`,
+      Vivid: okFromList(VIVID_PALETTE),
+      Pastel: okFromList(PASTEL_PALETTE),
+    };
+    let colorScheme = "Spectrum";
+    try {
+      const s = localStorage.getItem("artroll-colors-v1");
+      if (s && COLOR_SCHEMES[s]) colorScheme = s;
+    } catch (e) {}
+
     function artColor(name, alpha) {
-      const i = Math.max(0, artMap.findIndex(a => a.name === name));
-      const hue = (i * 47) % 360;
-      return `hsl(${hue} 70% 55% / ${alpha == null ? 1 : alpha})`;
+      const entry = artMap.find(a => a.name === name);
+      // Note carries an articulation not present in the active bank → neutral grey
+      if (!entry) return `oklch(55% 0 0 / ${alpha == null ? 1 : alpha})`;
+      const i = entry._colorIdx ?? artMap.indexOf(entry);
+      return (COLOR_SCHEMES[colorScheme] || COLOR_SCHEMES.Spectrum)(i, alpha);
     }
 
     // ---- Drawing ----
@@ -646,7 +1348,8 @@
       drawOverlays();
       drawKeyboard();
       drawRuler();
-      drawVelLane();
+      if (laneMode === "velocity") drawVelLane();
+      else drawCCLane(laneMode);
       drawLane();
       // top-left corner cap
       ctx.fillStyle = "var(--c-bg--0500)";
@@ -718,8 +1421,13 @@
         if (x < gx0 - 1 || x > gx0 + gw + 1) continue;
         const isBar = Math.abs(b % BEATS_PER_BAR) < 1e-6;
         const isBeat = Math.abs(b - Math.round(b)) < 1e-6;
-        ctx.strokeStyle = isBar ? cssVar("--c-text-secondary") : line;
-        ctx.globalAlpha = isBar ? 0.7 : (isBeat ? 0.5 : 0.25);
+        // Bar lines draw from --c-text-primary (consistently bright across every
+        // theme) rather than --c-text-secondary, whose lightness varies per theme —
+        // e.g. Studio's secondary is darker AND its grid bg lighter, which halved
+        // bar-to-bg contrast and made bars nearly vanish. Primary @ a lower alpha
+        // keeps even bar contrast in all themes; beats/subs stay on the darker line.
+        ctx.strokeStyle = isBar ? cssVar("--c-text-primary") : line;
+        ctx.globalAlpha = isBar ? 0.5 : (isBeat ? 0.68 : 0.4);
         ctx.beginPath(); ctx.moveTo(Math.round(x) + 0.5, gy0); ctx.lineTo(Math.round(x) + 0.5, gy0 + gh); ctx.stroke();
         ctx.globalAlpha = 1;
       }
@@ -730,33 +1438,95 @@
       ctx.restore();
     }
 
+    // Rounded-rect path helper (bigger, friendlier note bodies).
+    function rrect(x, y, w, h, r) {
+      r = Math.max(0, Math.min(r, h / 2, w / 2));
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(x, y, w, h, r);
+      else {
+        ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+      }
+    }
+
+    // Paint one note body with velocity-driven glow. `o` is a note-like object;
+    // opts: { selected, alpha (born/dying fade), lift (hover), pulse (playhead) }.
+    // The glow's blur + a brighter inner core scale with velocity — louder notes
+    // read hotter — and selection / hover / playhead crossings boost it further.
+    function paintNote(o, opts) {
+      const accent = cssVar("--c-highlight--primary");
+      const x = beatToX(o.startTime);
+      const w = Math.max(2, o.duration * pxPerBeat);
+      const y = pitchTopY(o.pitch) + (opts.lift ? -3 : 0);
+      const ny = y + 1, nh = ROW_H - 2, r = 3.5;
+      const velN = Math.min(1, (o.velocity || 100) / 127);
+      const selected = opts.selected;
+      const alpha = opts.alpha == null ? 1 : opts.alpha;
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      if (o.muted) {
+        // deactivated: faint inert shell, no glow
+        ctx.fillStyle = `oklch(from ${cssVar("--c-text-secondary")} l c h / ${selected ? 0.35 : 0.16})`;
+        rrect(x, ny, w, nh, r); ctx.fill();
+        ctx.strokeStyle = cssVar("--c-text-secondary"); ctx.lineWidth = 1;
+        rrect(Math.round(x) + 0.5, Math.round(ny) + 0.5, Math.max(1, Math.round(w) - 1), nh - 1, r); ctx.stroke();
+        ctx.restore();
+        return;
+      }
+      const a = 0.42 + 0.55 * velN;
+      const fill = o.art ? artColor(o.art, selected ? 1 : a) : (selected ? accent : `oklch(from ${accent} l c h / ${a})`);
+      const glowCol = o.art ? artColor(o.art, 1) : accent;
+      // outer bloom
+      ctx.shadowColor = glowCol;
+      ctx.shadowBlur = ((3 + velN * 13) * (selected ? 1.6 : 1) + (opts.lift ? 9 : 0) + (opts.pulse || 0)) * alpha;
+      ctx.fillStyle = fill;
+      rrect(x, ny, w, nh, r); ctx.fill();
+      // brighter inner core for loud / pulsing notes
+      if (velN > 0.5 || opts.pulse || opts.lift) {
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = alpha * Math.min(0.95, 0.22 + velN * 0.5 + (opts.pulse ? 0.32 : 0) + (opts.lift ? 0.18 : 0));
+        ctx.fillStyle = `oklch(from ${glowCol} calc(l * 1.3) c h)`;
+        rrect(x + 1, ny + 1, Math.max(1, w - 2), Math.max(1, nh - 2), Math.max(1, r - 1)); ctx.fill();
+        ctx.globalAlpha = alpha;
+      }
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = selected ? accent : `oklch(from ${glowCol} calc(l * 1.12) c h)`;
+      ctx.lineWidth = selected ? 2 : 1;
+      rrect(Math.round(x) + 0.5, Math.round(ny) + 0.5, Math.max(1, Math.round(w) - 1), nh - 1, r); ctx.stroke();
+      ctx.restore();
+    }
+
     function drawNotes() {
       const gx0 = GUTTER, gy0 = RULER, gh = gridH(), gw = gridW();
       ctx.save();
       ctx.beginPath(); ctx.rect(gx0, gy0, gw, gh); ctx.clip();
-      const accent = cssVar("--c-highlight--primary");
-      const border = cssVar("--c-control-border");
+      const now = performance.now();
+      const pb = playing ? playheadBeat() : null;
+      const onGrid = (x, w, y) => !(x + w < gx0 || x > gx0 + gw || y + ROW_H < gy0 || y > gy0 + gh);
+      // dying notes fade out beneath the live ones
+      for (let i = dying.length - 1; i >= 0; i--) {
+        const d = dying[i];
+        const p = (now - d.t0) / DIE_MS;
+        if (p >= 1) { dying.splice(i, 1); continue; }
+        const x = beatToX(d.startTime), w = Math.max(2, d.duration * pxPerBeat), y = pitchTopY(d.pitch);
+        if (!onGrid(x, w, y)) continue;
+        paintNote(d, { selected: false, alpha: (1 - p) * 0.9, pulse: 0 });
+      }
       for (const n of notes) {
-        const x = beatToX(n.startTime);
-        const w = Math.max(2, n.duration * pxPerBeat);
-        const y = pitchTopY(n.pitch);
-        if (x + w < gx0 || x > gx0 + gw || y + ROW_H < gy0 || y > gy0 + gh) continue;
+        // During right-click erase, skip notes already marked — they show only as dying fade-outs
+        if (drag && drag.mode === "erase" && drag.erased && drag.erased.has(n._key)) continue;
+        const x = beatToX(n.startTime), w = Math.max(2, n.duration * pxPerBeat), y = pitchTopY(n.pitch);
+        if (!onGrid(x, w, y)) continue;
         const selected = selection.has(n._key);
-        const a = 0.35 + 0.6 * Math.min(1, (n.velocity || 100) / 127);
-        // Deactivated (muted) notes render as a faint grey shell — kept on the
-        // grid but visibly inert; they don't play and emit no keyswitch.
-        // Otherwise notes are tinted by articulation (FL "Articulate"-style),
-        // un-articulated notes keep the accent color. Selection = accent outline.
-        ctx.fillStyle = n.muted
-          ? `oklch(from ${cssVar("--c-text-secondary")} l c h / ${selected ? 0.35 : 0.18})`
-          : n.art
-          ? artColor(n.art, selected ? 1 : a)
-          : (selected ? accent : `oklch(from ${accent} l c h / ${a})`);
-        ctx.fillRect(x, y + 1, w, ROW_H - 2);
-        ctx.strokeStyle = selected ? accent : (n.muted ? cssVar("--c-text-secondary") : border);
-        ctx.lineWidth = selected ? 2 : 1;
-        ctx.strokeRect(Math.round(x) + 0.5, Math.round(y + 1) + 0.5, Math.round(w) - 1, ROW_H - 3);
-        ctx.lineWidth = 1;
+        const born = n._born ? Math.min(1, (now - n._born) / BORN_MS) : 1;
+        const lift = false;
+        let pulse = 0;
+        if (pb != null && !n.muted && pb >= n.startTime - 0.03 && pb <= n.startTime + n.duration) {
+          pulse = 16 * Math.max(0, 1 - (pb - n.startTime) / 0.4);
+        }
+        paintNote(n, { selected, alpha: born, lift, pulse });
       }
       ctx.restore();
     }
@@ -880,6 +1650,7 @@
 
     // Velocity lane: a stem + head per non-muted note, height ∝ velocity.
     function drawVelLane() {
+      if (VEL_LANE <= 0) return;
       const gw = gridW(), top = viewH - BOTTOM();
       fillRect(0, top, viewW, VEL_LANE, cssVar("--c-control-bg--500"));
       ctx.strokeStyle = cssVar("--c-control-border");
@@ -912,6 +1683,110 @@
         ctx.beginPath(); ctx.arc(px, y, selected ? 3 : 2.2, 0, Math.PI * 2); ctx.fill();
       }
       ctx.lineWidth = 1;
+      ctx.restore();
+    }
+
+    // Switchable control lane — a MIDI CC automation envelope (Phase 1). Shares
+    // the velocity lane's region/height. Breakpoints (beats x 0-127) are joined
+    // by a line over a filled area; the first/last values hold flat to the clip
+    // edges. An empty envelope draws as a flat line at 0.
+    function drawCCLane(id) {
+      if (VEL_LANE <= 0) return;
+      const gw = gridW(), top = viewH - BOTTOM();
+      fillRect(0, top, viewW, VEL_LANE, cssVar("--c-control-bg--500"));
+      ctx.strokeStyle = cssVar("--c-control-border");
+      ctx.beginPath(); ctx.moveTo(0, top + 0.5); ctx.lineTo(viewW, top + 0.5); ctx.stroke();
+      const def = CC_LANES[id];
+      // label gutter
+      ctx.fillStyle = cssVar("--c-text-secondary");
+      ctx.font = "9px sans-serif"; ctx.textBaseline = "middle"; ctx.textAlign = "right";
+      ctx.fillText(def ? def.label : "CC", GUTTER - 3, top + VEL_LANE / 2);
+
+      ctx.save();
+      ctx.beginPath(); ctx.rect(GUTTER, top, gw, VEL_LANE); ctx.clip();
+      const baseY = velBaseline();
+      // soft vertical beat / bar lines, mirroring the main grid below
+      const cLine = cssVar("--c-control-border");
+      const firstBeat = Math.max(0, Math.floor(xToBeat(GUTTER)));
+      const lastBeat = Math.ceil(xToBeat(GUTTER + gw));
+      const beatStep = pxPerBeat < 24 ? BEATS_PER_BAR : (pxPerBeat < 48 ? 1 : (snap > 0 && snap < 1 ? snap : 1));
+      for (let b = firstBeat; b <= lastBeat; b += beatStep) {
+        const x = beatToX(b);
+        if (x < GUTTER - 1 || x > GUTTER + gw + 1) continue;
+        const isBar = Math.abs(b % BEATS_PER_BAR) < 1e-6;
+        const isBeat = Math.abs(b - Math.round(b)) < 1e-6;
+        ctx.strokeStyle = isBar ? cssVar("--c-text-primary") : cLine;
+        ctx.globalAlpha = isBar ? 0.32 : (isBeat ? 0.38 : 0.18);
+        ctx.beginPath(); ctx.moveTo(Math.round(x) + 0.5, top); ctx.lineTo(Math.round(x) + 0.5, top + VEL_LANE); ctx.stroke();
+      }
+      // faint horizontal guides at 0 / 64 / 127
+      ctx.strokeStyle = cLine; ctx.globalAlpha = 0.5;
+      for (const v of [0, 64, 127]) {
+        const y = Math.round(ccValToY(v)) + 0.5;
+        ctx.beginPath(); ctx.moveTo(GUTTER, y); ctx.lineTo(GUTTER + gw, y); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+
+      const accent = cssVar("--c-highlight--primary");
+      const pts = sortCC(id);
+      // polyline across the clip; empty envelope = flat line at 0. Curved segments
+      // (a.c ≠ 1) are sampled so the fill + stroke follow the bend.
+      const poly = [];
+      if (!pts.length) {
+        poly.push({ x: beatToX(0), y: ccValToY(0) }, { x: beatToX(clipDuration), y: ccValToY(0) });
+      } else {
+        poly.push({ x: beatToX(0), y: ccValToY(pts[0].v) });
+        poly.push({ x: beatToX(pts[0].t), y: ccValToY(pts[0].v) });
+        for (let i = 0; i < pts.length - 1; i++) {
+          const a = pts[i], b = pts[i + 1], k = a.c || 0;
+          const x0 = beatToX(a.t), x1 = beatToX(b.t);
+          if (Math.abs(k) < 1e-3) {
+            poly.push({ x: x1, y: ccValToY(b.v) });
+          } else {
+            const N = Math.max(8, Math.min(48, Math.round(Math.abs(x1 - x0) / 6)));
+            for (let s = 1; s <= N; s++) {
+              const f = s / N;
+              poly.push({ x: x0 + (x1 - x0) * f, y: ccValToY(ccCurveVal(a.v, b.v, k, f)) });
+            }
+          }
+        }
+        poly.push({ x: beatToX(clipDuration), y: ccValToY(pts[pts.length - 1].v) });
+      }
+      // filled area under the curve
+      ctx.beginPath();
+      ctx.moveTo(poly[0].x, baseY);
+      for (const q of poly) ctx.lineTo(q.x, q.y);
+      ctx.lineTo(poly[poly.length - 1].x, baseY);
+      ctx.closePath();
+      ctx.fillStyle = `oklch(from ${accent} l c h / 0.16)`;
+      ctx.fill();
+      // the curve
+      ctx.strokeStyle = accent; ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      poly.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y));
+      ctx.stroke();
+      // breakpoint handles — hidden while drawing or when freehand makes them dense,
+      // so a pencil-drawn envelope reads as a smooth line rather than a dotted run.
+      const drawing = drag && (drag.mode === "cc-draw" || drag.mode === "cc-erase");
+      if (!drawing && pts.length <= 64) for (const p of pts) {
+        const x = beatToX(p.t), y = ccValToY(p.v);
+        if (x < GUTTER - 6 || x > GUTTER + gw + 6) continue;
+        const hot = drag && drag.ccPt === p;
+        ctx.fillStyle = accent;
+        ctx.shadowColor = accent; ctx.shadowBlur = hot ? 11 : 5;
+        ctx.beginPath(); ctx.arc(x, y, hot ? 4.6 : 3.2, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = `oklch(from ${accent} calc(l * 1.4) c h)`;
+        ctx.beginPath(); ctx.arc(x, y, hot ? 2 : 1.4, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.lineWidth = 1;
+      // value readout while dragging a point
+      if (drag && drag.mode === "cc-point" && drag.ccPt) {
+        const p = drag.ccPt, x = beatToX(p.t), y = ccValToY(p.v);
+        ctx.fillStyle = cssVar("--c-text-primary");
+        ctx.font = "10px sans-serif"; ctx.textBaseline = "bottom"; ctx.textAlign = "left";
+        ctx.fillText(String(p.v), Math.min(x + 7, GUTTER + gw - 22), Math.max(top + 11, y - 4));
+      }
       ctx.restore();
     }
 
@@ -965,12 +1840,13 @@
       const start = clampBeat(snapBeat(xToBeat(x)));
       const n = {
         _key: keyCounter++, id: undefined, pitch, startTime: start,
-        duration: lastLength, velocity: 100, art: currentArt,
+        duration: lastLength, velocity: 100, art: currentArt, _born: performance.now(),
       };
       if (n.startTime + n.duration > clipDuration) n.startTime = Math.max(0, clipDuration - n.duration);
       notes.push(n);
       selection = new Set([n._key]);
       previewNote(n);
+      startAnim();
       return n;
     }
 
@@ -980,10 +1856,11 @@
       if (beat <= n.startTime + 1e-3 || beat >= end - 1e-3) return false;
       const second = {
         _key: keyCounter++, id: undefined, pitch: n.pitch,
-        startTime: beat, duration: end - beat, velocity: n.velocity, art: n.art,
+        startTime: beat, duration: end - beat, velocity: n.velocity, art: n.art, _born: performance.now(),
       };
       n.duration = beat - n.startTime;
       notes.push(second);
+      startAnim();
       if (dragRef) {
         dragRef.cutKeys.add(n._key);
         dragRef.cutKeys.add(second._key);
@@ -1036,12 +1913,13 @@
       const made = clipboard.map(c => ({
         _key: keyCounter++, id: undefined, pitch: c.pitch,
         startTime: fitStart(base + c.rel, c.duration), duration: c.duration,
-        velocity: c.velocity, art: c.art, muted: c.muted,
+        velocity: c.velocity, art: c.art, muted: c.muted, _born: performance.now(),
       }));
       notes.push(...made);
       selection = new Set(made.map(n => n._key));
       pasteAt = base + clipSpan;   // tile the next no-locator paste forward by one span
       pushUndoState(pre);
+      startAnim();
       requestDraw();
     }
 
@@ -1055,11 +1933,12 @@
       const made = sel.map(n => ({
         _key: keyCounter++, id: undefined, pitch: n.pitch,
         startTime: fitStart(n.startTime + span, n.duration), duration: n.duration,
-        velocity: n.velocity, art: n.art, muted: n.muted === true,
+        velocity: n.velocity, art: n.art, muted: n.muted === true, _born: performance.now(),
       }));
       notes.push(...made);
       selection = new Set(made.map(n => n._key));
       pushUndoState(pre);
+      startAnim();
       requestDraw();
     }
 
@@ -1076,6 +1955,22 @@
       for (const n of sel) n.startTime += delta;
       pushUndoState(pre);
       requestDraw();
+    }
+
+    // Shift+←/→ : extend or shrink the right edge of selected notes by one grid step.
+    function resizeSelection(dir) {
+      if (!selection.size) return;
+      const step = snap > 0 ? snap : 0.03125; // fall back to 1/32 when grid is off
+      const sel = notes.filter(n => selection.has(n._key));
+      const pre = snapState();
+      let changed = false;
+      for (const n of sel) {
+        const newDur = Math.max(step, n.duration + dir * step);
+        const maxDur = clipDuration - n.startTime;
+        const clamped = Math.min(newDur, maxDur);
+        if (Math.abs(clamped - n.duration) > 1e-9) { n.duration = clamped; changed = true; }
+      }
+      if (changed) { pushUndoState(pre); requestDraw(); }
     }
 
     // ↑/↓ : transpose selection, group-clamped to 0..127. Shift = ±octave.
@@ -1127,10 +2022,20 @@
     // including over our own context menu or the toolbar.
     document.addEventListener("contextmenu", e => e.preventDefault());
 
+    // clear the hover-lift when the cursor leaves the grid
+    canvas.addEventListener("mouseleave", () => { if (hoverKey != null) { hoverKey = null; requestDraw(); } });
+
     canvas.addEventListener("mousedown", e => {
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left, y = e.clientY - rect.top;
       hideCtxMenu();
+      // Middle mouse button = hand pan (Ableton / FL Studio style)
+      if (e.button === 1) {
+        e.preventDefault();
+        drag = { mode: "pan", startX: x, startY: y, scrollX0: scrollX, scrollY0: scrollY };
+        canvas.style.cursor = "grabbing";
+        return;
+      }
       // Ruler click = set the play-from locator (tool-independent). `marker`
       // already drives togglePlayback and renders as a vertical line.
       if (e.button === 0 && y < RULER && x >= GUTTER) {
@@ -1138,7 +2043,21 @@
         requestDraw();
         return;
       }
-      if (e.button === 0 && inVelLane(x, y)) return onVelDown(e, x, y);
+      // Drag the lane's top border up/down to resize the velocity / CC lane.
+      if (e.button === 0 && VEL_LANE > 0 && Math.abs(y - (viewH - BOTTOM())) <= LANE_GRAB && x >= 0) {
+        drag = { mode: "lane-resize" };
+        canvas.style.cursor = "ns-resize";
+        e.preventDefault();
+        return;
+      }
+      if (inVelLane(x, y)) {
+        if (laneMode !== "velocity") {
+          if (tool === "pencil") return onCCPencilDown(e, x, y);
+          return onCCDown(e, x, y);
+        }
+        if (e.button === 0) return onVelDown(e, x, y);
+        return;
+      }
       if (inLane(x, y)) return onLaneDown(e, x, y);
       if (!inGrid(x, y)) return;
       if (e.button === 2) return onRightDown(e, x, y);
@@ -1222,7 +2141,212 @@
       }
     }
 
+    // ---- CC automation lane editing (Phase 1) ----
+    // Every press either grabs an existing breakpoint or creates one and drags it;
+    // double-click or right-click on a breakpoint deletes it. Time snaps to grid
+    // (Option/Alt = freehand); value is free. One undo step per gesture.
+    function ccHitPoint(id, x, y) {
+      let hit = null, hd = 1e9;
+      for (const p of sortCC(id)) {
+        const d = Math.hypot(beatToX(p.t) - x, ccValToY(p.v) - y);
+        if (d < hd && d <= 7) { hd = d; hit = p; }
+      }
+      return hit;
+    }
+    // Curve eval along a segment a→b at fraction f (0..1). a.c is the segment's
+    // curvature k (0/undefined = straight). Uses an exponential ease whose slope
+    // stays finite at both endpoints — so bends are smooth, never a vertical kink
+    // at the breakpoint the way a power curve (f^p) would be.
+    function ccCurveVal(av, bv, k, f) {
+      const ff = Math.max(0, Math.min(1, f));
+      const e = (!k || Math.abs(k) < 1e-3) ? ff : (Math.exp(k * ff) - 1) / (Math.exp(k) - 1);
+      return av + (bv - av) * e;
+    }
+    // Hit-test the curve line between two real breakpoints (for tension dragging).
+    function ccHitSegment(id, x, y) {
+      const pts = sortCC(id);
+      for (let i = 0; i < pts.length - 1; i++) {
+        const a = pts[i], b = pts[i + 1];
+        const x0 = beatToX(a.t), x1 = beatToX(b.t);
+        if (Math.abs(x1 - x0) < 1) continue;
+        if (x < Math.min(x0, x1) - 1 || x > Math.max(x0, x1) + 1) continue;
+        const f = (x - x0) / (x1 - x0);
+        const yy = ccValToY(ccCurveVal(a.v, b.v, a.c || 0, f));
+        if (Math.abs(yy - y) <= 5) return { i, a, b };
+      }
+      return null;
+    }
+    function ccDeletePoint(id, p) {
+      const arr = ccPoints(id), i = arr.indexOf(p);
+      if (i < 0) return false;
+      const pre = snapState();
+      arr.splice(i, 1);
+      pushUndoState(pre);
+      requestDraw();
+      return true;
+    }
+    function onCCDown(e, x, y) {
+      const id = laneMode;
+      const hit = ccHitPoint(id, x, y);
+      if (e.button === 2) { if (hit) ccDeletePoint(id, hit); return; }
+      if (e.button !== 0) return;
+      const now = performance.now();
+      const isDouble = (now - lastClick.t < DBL_MS)
+        && Math.abs(x - lastClick.x) < DBL_PX && Math.abs(y - lastClick.y) < DBL_PX;
+      lastClick = { t: now, x, y };
+      if (hit && isDouble) { ccDeletePoint(id, hit); return; }
+      if (!hit) {
+        // Pressing on a segment line (not a point) bends it; double-click resets it straight.
+        const seg = ccHitSegment(id, x, y);
+        if (seg && Math.abs(seg.b.v - seg.a.v) > 1) {
+          if (isDouble) { const pre0 = snapState(); seg.a.c = 0; pushUndoState(pre0); requestDraw(); return; }
+          drag = { mode: "cc-curve", id, seg, pre: snapState(), changed: false };
+          applyCCCurve(x, y);
+          requestDraw();
+          return;
+        }
+      }
+      const pre = snapState();
+      let pt = hit;
+      if (!pt) {
+        const tt = e.altKey ? clampBeat(xToBeat(x)) : clampBeat(snapBeat(xToBeat(x)));
+        pt = { t: tt, v: ccYToVal(y) };
+        ccPoints(id).push(pt);
+        sortCC(id);
+      }
+      drag = { mode: "cc-point", id, ccPt: pt, pre, changed: !hit };
+      applyCCDrag(x, y, e.altKey);
+      requestDraw();
+    }
+    function applyCCDrag(cx, cy, alt) {
+      const m = drag;
+      if (!m || m.mode !== "cc-point") return;
+      const arr = ccPoints(m.id), p = m.ccPt, i = arr.indexOf(p);
+      let tt = clampBeat(alt ? xToBeat(cx) : snapBeat(xToBeat(cx)));
+      const lo = i > 0 ? arr[i - 1].t : 0;
+      const hi = i < arr.length - 1 ? arr[i + 1].t : clipDuration;
+      tt = Math.max(lo, Math.min(hi, tt));
+      const nv = ccYToVal(cy);
+      if (p.t !== tt || p.v !== nv) m.changed = true;
+      p.t = tt; p.v = nv;
+    }
+
+    // ---- CC pencil / line drawing (Phase 2) ----
+    // The pencil tool over a CC lane paints the envelope by dragging:
+    //   • freehand — every point the cursor sweeps writes a breakpoint at the
+    //     cursor's value; grid On lands them on the grid (Ableton-style steps),
+    //     grid Off / Option draws a continuous line. Old points under the swept
+    //     span are cleared so the new shape replaces what was there.
+    //   • line (Shift) — a straight ramp from press to cursor; the spanned range
+    //     is cleared and rebuilt from just the two endpoints.
+    // Right-drag erases points under the cursor. One undo step per gesture.
+    const ccBeatAt = (x, alt) => clampBeat(alt ? xToBeat(x) : snapBeat(xToBeat(x)));
+    function ccUpsert(m, arr, t, v) {
+      const eps = Math.max(1e-4, 3 / pxPerBeat);
+      for (const p of arr) {
+        if (Math.abs(p.t - t) <= eps) { p.t = t; p.v = v; m.mine.add(p); return p; }
+      }
+      const p = { t, v }; arr.push(p); m.mine.add(p); return p;
+    }
+    function onCCPencilDown(e, x, y) {
+      const id = laneMode;
+      if (e.button === 2) {
+        drag = { mode: "cc-erase", id, pre: snapState(), changed: false };
+        applyCCErase(x);
+        requestDraw();
+        return;
+      }
+      if (e.button !== 0) return;
+      drag = {
+        mode: "cc-draw", id, pre: snapState(), changed: false,
+        line: e.shiftKey, mine: new Set(), lo: Infinity, hi: -Infinity,
+        startBeat: ccBeatAt(x, e.altKey), startVal: ccYToVal(y),
+        lastX: null, lastVal: null,
+      };
+      applyCCDraw(x, y, e.altKey);
+      requestDraw();
+    }
+    function applyCCDraw(cx, cy, alt) {
+      const m = drag; if (!m || m.mode !== "cc-draw") return;
+      const arr = ccPoints(m.id);
+      const curVal = ccYToVal(cy);
+      if (m.line) {
+        const a = m.startBeat, b = ccBeatAt(cx, alt);
+        const lo = Math.min(a, b), hi = Math.max(a, b);
+        for (let i = arr.length - 1; i >= 0; i--) {
+          const t = arr[i].t;
+          if (t >= lo - 1e-4 && t <= hi + 1e-4 && !m.mine.has(arr[i])) arr.splice(i, 1);
+        }
+        m.mine.clear();
+        ccUpsert(m, arr, m.startBeat, m.startVal);
+        ccUpsert(m, arr, b, curVal);
+        m.lo = lo; m.hi = hi; m.changed = true;
+        sortCC(m.id);
+        return;
+      }
+      // freehand sweep — sample along the path so fast drags leave no gaps.
+      // Continuous by default (dense points = smooth, hand-built ramps); hold
+      // Option/Alt to land each point on the grid for stepped automation.
+      const fhBeat = (px) => alt ? clampBeat(snapBeat(xToBeat(px))) : clampBeat(xToBeat(px));
+      if (m.lastX == null) {
+        const b = fhBeat(cx);
+        ccUpsert(m, arr, b, curVal); m.lo = Math.min(m.lo, b); m.hi = Math.max(m.hi, b);
+      } else {
+        const steps = Math.max(1, Math.round(Math.abs(cx - m.lastX) / 4));
+        for (let i = 1; i <= steps; i++) {
+          const f = i / steps;
+          const px = m.lastX + (cx - m.lastX) * f;
+          const v = Math.round(m.lastVal + (curVal - m.lastVal) * f);
+          const b = fhBeat(px);
+          ccUpsert(m, arr, b, v); m.lo = Math.min(m.lo, b); m.hi = Math.max(m.hi, b);
+        }
+      }
+      m.lastX = cx; m.lastVal = curVal; m.changed = true;
+      sortCC(m.id);
+    }
+    function applyCCErase(cx) {
+      const m = drag; if (!m || m.mode !== "cc-erase") return;
+      const arr = ccPoints(m.id);
+      for (let i = arr.length - 1; i >= 0; i--) {
+        if (Math.abs(beatToX(arr[i].t) - cx) <= 7) { arr.splice(i, 1); m.changed = true; }
+      }
+    }
+    // Bend the grabbed segment so its curve passes (about) through the cursor.
+    // Solve the exponential ease (e^{k·f}−1)/(e^k−1) = ε for k by bisection (the
+    // value at a fixed fraction f decreases monotonically as k grows).
+    function applyCCCurve(cx, cy) {
+      const m = drag; if (!m || m.mode !== "cc-curve") return;
+      const a = m.seg.a, b = m.seg.b;
+      const x0 = beatToX(a.t), x1 = beatToX(b.t);
+      if (Math.abs(x1 - x0) < 1 || Math.abs(b.v - a.v) < 1) return;
+      let f = (cx - x0) / (x1 - x0); f = Math.max(0.04, Math.min(0.96, f));
+      let eps = (ccYToVal(cy) - a.v) / (b.v - a.v); eps = Math.max(0.004, Math.min(0.996, eps));
+      const KMAX = 20;
+      const g = (k) => (Math.abs(k) < 1e-6 ? f : (Math.exp(k * f) - 1) / (Math.exp(k) - 1));
+      let lo = -KMAX, hi = KMAX;
+      for (let it = 0; it < 40; it++) {
+        const mid = (lo + hi) / 2;
+        if (g(mid) > eps) lo = mid; else hi = mid;
+      }
+      a.c = (lo + hi) / 2;
+      m.changed = true;
+    }
+
     function onRightDown(e, x, y) {
+      // In pencil mode: right-click + drag = FL-style sweep erase
+      if (tool === "pencil") {
+        const pre = snapState();
+        const erased = new Set();
+        const hit = noteAt(x, y);
+        if (hit) {
+          erased.add(hit.note._key);
+          markDying([hit.note._key]);
+        }
+        drag = { mode: "erase", pre, erased };
+        canvas.style.cursor = "crosshair";
+        requestDraw();
+        return;
+      }
       const hit = noteAt(x, y);
       if (!hit) return;
       // act on the whole selection when the clicked note is part of it
@@ -1243,15 +2367,52 @@
 
       if (hit) {
         const n = hit.note;
-        if (selectorMode && hit.zone === "body" && !e.shiftKey && !cmd) {
-          // Articulation Selector Mode: a plain click converts, never selects.
-          // Clicking a note inside the current selection converts the WHOLE
-          // selection; clicking an unselected note converts just that note.
-          reArt(selection.has(n._key) ? [...selection] : [n._key], currentArt);
+        if (tool === "brush" && hit.zone === "body" && !e.shiftKey && !cmd) {
+          // Brush paint: convert the clicked note (or whole selection) immediately,
+          // then start a drag so the cursor sweeps additional notes while held.
+          const pre = snapState();
+          const painted = new Set();
+          let anyChanged = false;
+          const keys = selection.has(n._key) ? [...selection] : [n._key];
+          for (const key of keys) {
+            const m = notes.find(q => q._key === key);
+            if (m) { painted.add(key); if (m.art !== currentArt) { m.art = currentArt; anyChanged = true; } }
+          }
+          previewNote(n);
+          drag = { mode: "brush-paint", pre, painted, changed: anyChanged };
+          requestDraw();
+          return;
+        }
+        if (e.shiftKey && hit.zone === "body") {
+          // Shift+drag on a note body = duplicate-and-move (originals stay in place)
+          const sourceKeys = selection.has(n._key) ? [...selection] : [n._key];
+          const sourceNotes = notes.filter(q => sourceKeys.includes(q._key));
+          const pre = snapState();
+          const now = performance.now();
+          const dupes = sourceNotes.map(s => ({
+            _key: keyCounter++, id: undefined, pitch: s.pitch,
+            startTime: s.startTime, duration: s.duration,
+            velocity: s.velocity, art: s.art, muted: s.muted === true,
+            _born: now,
+          }));
+          notes.push(...dupes);
+          selection = new Set(dupes.map(d => d._key));
+          const clickedDupe = dupes[sourceNotes.findIndex(s => s._key === n._key)] || dupes[0];
+          previewNote(clickedDupe);
+          startAnim();
+          drag = {
+            mode: "move", anchor: clickedDupe,
+            startX: x, startY: y, thresholdCrossed: false,
+            grabBeat: xToBeat(x) - clickedDupe.startTime,
+            grabPitch: yToPitch(y) - clickedDupe.pitch,
+            origins: new Map(dupes.map(d => [d._key, { startTime: d.startTime, pitch: d.pitch }])),
+            pre, changed: false, isDupe: true,
+          };
+          requestDraw();
           return;
         }
         if (e.shiftKey) {
-          // Shift = additive: new notes join the selection, nothing leaves it
+          // Shift+click on edge or empty = additive selection
           selection.add(n._key);
           requestDraw();
           return;
@@ -1271,6 +2432,7 @@
         } else {
           drag = {
             mode: "move", anchor: n,
+            startX: x, startY: y, thresholdCrossed: false,
             grabBeat: xToBeat(x) - n.startTime, grabPitch: yToPitch(y) - n.pitch,
             origins: new Map([...selection].map(k => {
               const m = notes.find(q => q._key === k);
@@ -1283,6 +2445,11 @@
         return;
       }
 
+      // Brush mode on empty grid: start a sweep drag without placing a note.
+      if (tool === "brush" && !e.shiftKey && !cmd) {
+        drag = { mode: "brush-paint", pre: snapState(), painted: new Set(), changed: false };
+        return;
+      }
       // empty grid
       if (isDouble) {
         // Ableton-style: double-click places, dragging extends (snapped)
@@ -1330,10 +2497,39 @@
           if (!selection.has(n._key)) selection = new Set([n._key]);
           drag = startResizeDrag(n, hit.zone === "resize-l" ? "l" : "r");
         } else {
+          if (e.shiftKey) {
+            // Shift+drag in pencil mode = duplicate-and-move (same as mouse tool)
+            const sourceKeys = selection.has(n._key) ? [...selection] : [n._key];
+            const sourceNotes = notes.filter(q => sourceKeys.includes(q._key));
+            const pre = snapState();
+            const now = performance.now();
+            const dupes = sourceNotes.map(s => ({
+              _key: keyCounter++, id: undefined, pitch: s.pitch,
+              startTime: s.startTime, duration: s.duration,
+              velocity: s.velocity, art: s.art, muted: s.muted === true,
+              _born: now,
+            }));
+            notes.push(...dupes);
+            selection = new Set(dupes.map(d => d._key));
+            const clickedDupe = dupes[sourceNotes.findIndex(s => s._key === n._key)] || dupes[0];
+            previewNote(clickedDupe);
+            startAnim();
+            drag = {
+              mode: "move", anchor: clickedDupe,
+              startX: x, startY: y, thresholdCrossed: false,
+              grabBeat: xToBeat(x) - clickedDupe.startTime,
+              grabPitch: yToPitch(y) - clickedDupe.pitch,
+              origins: new Map(dupes.map(d => [d._key, { startTime: d.startTime, pitch: d.pitch }])),
+              pre, changed: false, isDupe: true,
+            };
+            requestDraw();
+            return;
+          }
           // Body grab in pencil mode = single-note move/edit.
           selection = new Set([n._key]);
           drag = {
             mode: "move", anchor: n,
+            startX: x, startY: y, thresholdCrossed: false,
             grabBeat: xToBeat(x) - n.startTime, grabPitch: yToPitch(y) - n.pitch,
             origins: new Map([[n._key, { startTime: n.startTime, pitch: n.pitch }]]),
             pre: snapState(), changed: false,
@@ -1368,17 +2564,71 @@
       const x = e.clientX - rect.left, y = e.clientY - rect.top;
 
       if (!drag) {
-        // hover feedback: resize cursor over either edge of a note
+        // Over the lane's top border: show the vertical-resize cursor.
+        if (VEL_LANE > 0 && Math.abs(y - (viewH - BOTTOM())) <= LANE_GRAB && x >= 0) {
+          canvas.style.cursor = "ns-resize";
+          if (hoverKey != null) { hoverKey = null; requestDraw(); }
+          return;
+        }
+        // CC lane, mouse tool: pointer over a breakpoint, ns-resize over a bendable
+        // segment line (drag to curve), default elsewhere.
+        if (tool === "mouse" && laneMode !== "velocity" && inVelLane(x, y)) {
+          const onPt = ccHitPoint(laneMode, x, y);
+          const seg = !onPt ? ccHitSegment(laneMode, x, y) : null;
+          canvas.style.cursor = onPt ? "pointer"
+            : (seg && Math.abs(seg.b.v - seg.a.v) > 1) ? "ns-resize" : "default";
+          if (hoverKey != null) { hoverKey = null; requestDraw(); }
+          return;
+        }
+        // hover feedback: resize cursor over either edge of a note, plus a glow
+        // "lift" on the hovered note body so it's obvious what you'll grab.
+        const hit = inGrid(x, y) ? noteAt(x, y) : null;
         if (tool !== "cut") {
-          const hit = inGrid(x, y) ? noteAt(x, y) : null;
-          const overEdge = hit && (hit.zone === "resize-l" || hit.zone === "resize-r");
+          const overEdge = tool !== "brush" && hit && (hit.zone === "resize-l" || hit.zone === "resize-r");
           canvas.style.cursor = overEdge ? "ew-resize" : toolCursor(tool);
         }
+        const nk = hit && hit.zone === "body" ? hit.note._key : null;
+        if (nk !== hoverKey) { hoverKey = nk; requestDraw(); }
         return;
       }
 
+      if (drag.mode === "lane-resize") {
+        VEL_LANE = Math.max(laneMinH(), Math.min(laneMaxH(), (viewH - LANE) - y));
+        resize();
+        clampScroll();
+        positionLaneSwitch();
+        requestDraw();
+        return;
+      }
+      if (drag.mode === "pan") {
+        scrollX = drag.scrollX0 - (x - drag.startX);
+        scrollY = drag.scrollY0 - (y - drag.startY);
+        clampScroll();
+        requestDraw();
+        return;
+      }
       if (drag.mode === "velocity") {
         applyVelDrag(x, y);
+        requestDraw();
+        return;
+      }
+      if (drag.mode === "cc-point") {
+        applyCCDrag(x, y, e.altKey);
+        requestDraw();
+        return;
+      }
+      if (drag.mode === "cc-draw") {
+        applyCCDraw(x, y, e.altKey);
+        requestDraw();
+        return;
+      }
+      if (drag.mode === "cc-erase") {
+        applyCCErase(x);
+        requestDraw();
+        return;
+      }
+      if (drag.mode === "cc-curve") {
+        applyCCCurve(x, y);
         requestDraw();
         return;
       }
@@ -1387,6 +2637,19 @@
         if (Math.abs(drag.end - drag.start) > 1e-6) drag.moved = true;
         previewPaint = drag.moved ? { s: Math.min(drag.start, drag.end), e: Math.max(drag.start, drag.end) } : null;
         requestDraw();
+        return;
+      }
+      if (drag.mode === "brush-paint") {
+        if (inGrid(x, y)) {
+          const hit = noteAt(x, y);
+          if (hit && hit.zone === "body" && !drag.painted.has(hit.note._key)) {
+            hit.note.art = currentArt;
+            drag.painted.add(hit.note._key);
+            drag.changed = true;
+            previewNote(hit.note);
+            requestDraw();
+          }
+        }
         return;
       }
       if (drag.mode === "marquee") {
@@ -1398,6 +2661,17 @@
       if (drag.mode === "cut") {
         cutAt(e, x, y);
         requestDraw();
+        return;
+      }
+      if (drag.mode === "erase") {
+        if (inGrid(x, y)) {
+          const hit = noteAt(x, y);
+          if (hit && !drag.erased.has(hit.note._key)) {
+            drag.erased.add(hit.note._key);
+            markDying([hit.note._key]);
+            requestDraw();
+          }
+        }
         return;
       }
       if (drag.mode === "pencil-place") {
@@ -1421,13 +2695,29 @@
         return;
       }
       if (drag.mode === "move") {
+        // Require a minimum drag distance before applying snapped movement —
+        // prevents click jitter from causing a snap-induced position shift.
+        if (!drag.thresholdCrossed) {
+          if (Math.abs(x - drag.startX) > 8 || Math.abs(y - drag.startY) > 8) drag.thresholdCrossed = true;
+          else { requestDraw(); return; }
+        }
         // apply one snapped delta to every selected note, clamped so the whole
         // group stays inside the clip and pitch range
         const a = drag.anchor;
         const ao = drag.origins.get(a._key);
         // snapped to the grid by default; hold Option/Alt for off-grid (freehand) move
-        const rawB = xToBeat(x) - drag.grabBeat;
-        let nb = e.altKey ? rawB : snapBeat(rawB);
+        let nb;
+        if (e.altKey) {
+          nb = xToBeat(x) - drag.grabBeat;
+        } else {
+          // Snap by how many grid cells the POINTER has crossed since mousedown —
+          // not by the note's absolute position. While the pointer stays in the
+          // cell it was pressed in, displacement is 0, so grazing a note as you
+          // begin a selection box (or any tiny drag) no longer snap-jumps it to
+          // the next grid line.
+          const downBeat = xToBeat(drag.startX);
+          nb = ao.startTime + (snapBeat(xToBeat(x)) - snapBeat(downBeat));
+        }
         nb = Math.max(0, Math.min(nb, clipDuration - a.duration));
         let dB = nb - ao.startTime;
         let dP = Math.max(0, Math.min(127, yToPitch(y) - drag.grabPitch)) - ao.pitch;
@@ -1506,6 +2796,30 @@
 
     window.addEventListener("mouseup", () => {
       if (!drag) return;
+      if (drag.mode === "lane-resize") {
+        try { localStorage.setItem("artroll-grid-v1", JSON.stringify({ rowH: ROW_H, gutter: GUTTER, velLane: VEL_LANE })); } catch(e) {}
+        canvas.style.cursor = toolCursor(tool);
+        drag = null;
+        requestDraw();
+        return;
+      }
+      if (drag.mode === "pan") {
+        canvas.style.cursor = toolCursor(tool);
+        drag = null;
+        requestDraw();
+        return;
+      }
+      if (drag.mode === "erase") {
+        if (drag.erased.size) {
+          notes = notes.filter(n => !drag.erased.has(n._key));
+          selection = new Set([...selection].filter(k => !drag.erased.has(k)));
+          pushUndoState(drag.pre);
+        }
+        canvas.style.cursor = toolCursor(tool);
+        drag = null;
+        requestDraw();
+        return;
+      }
       if (drag.mode === "paint") {
         if (drag.moved) {
           const s = Math.min(drag.start, drag.end), eb = Math.max(drag.start, drag.end);
@@ -1539,12 +2853,42 @@
       } else if (drag.mode === "pencil-place") {
         lastLength = drag.note.duration;
       } else if (drag.mode === "move") {
-        if (drag.pre && drag.changed) pushUndoState(drag.pre);
+        // push undo if notes moved OR if this was a duplicate (notes were created regardless)
+        if (drag.pre && (drag.changed || drag.isDupe)) pushUndoState(drag.pre);
+        else if (!drag.isDupe) {
+          // click without actual movement: restore to original positions
+          // (the threshold may not have been crossed, but be defensive just in case)
+          for (const [k, o] of drag.origins) {
+            const n = notes.find(q => q._key === k);
+            if (n) { n.startTime = o.startTime; n.pitch = o.pitch; }
+          }
+        }
+      } else if (drag.mode === "brush-paint") {
+        if (drag.changed) pushUndoState(drag.pre);
       } else if (drag.mode === "velocity") {
         if (drag.changed) {
           pushUndoState(drag.pre);                 // → auto live-apply (velocity is serialized)
           if (drag.anchor) previewNote(drag.anchor);
         }
+      } else if (drag.mode === "cc-point") {
+        if (drag.changed) { sortCC(drag.id); pushUndoState(drag.pre); }
+      } else if (drag.mode === "cc-draw") {
+        if (drag.changed) {
+          // drop any stray pre-existing points the sweep crossed but didn't write
+          const arr = ccPoints(drag.id);
+          if (drag.lo <= drag.hi) {
+            for (let i = arr.length - 1; i >= 0; i--) {
+              const t = arr[i].t;
+              if (t > drag.lo + 1e-4 && t < drag.hi - 1e-4 && !drag.mine.has(arr[i])) arr.splice(i, 1);
+            }
+          }
+          sortCC(drag.id);
+          pushUndoState(drag.pre);
+        }
+      } else if (drag.mode === "cc-erase") {
+        if (drag.changed) { sortCC(drag.id); pushUndoState(drag.pre); }
+      } else if (drag.mode === "cc-curve") {
+        if (drag.changed) pushUndoState(drag.pre);
       }
       drag = null;
       requestDraw();
@@ -1587,6 +2931,14 @@
         if (e.key === "Escape") closeMapEditor();
         return;
       }
+      // Help / shortcuts overlay: ? toggles it, Esc (or ?) closes it. While it's
+      // open it swallows every other shortcut so nothing edits behind it.
+      const helpEl = document.getElementById("help-overlay");
+      if (helpEl.classList.contains("show")) {
+        if (e.key === "Escape" || e.key === "?") { e.preventDefault(); closeHelp(); }
+        return;
+      }
+      if (e.key === "?") { e.preventDefault(); openHelp(); return; }
       const cmd = e.metaKey || e.ctrlKey;
       const k = e.key.toLowerCase();
 
@@ -1621,7 +2973,18 @@
         requestDraw();
         return;
       }
-      // Clipboard — Cmd/Ctrl+C copy, +V paste at locator (or 0), +D duplicate-after.
+      // Clipboard — Cmd/Ctrl+C copy, +X cut, +V paste after selection, +D duplicate-after.
+      if (cmd && k === "x") {
+        e.preventDefault();
+        if (!selection.size) return;
+        copySelection();
+        pushUndo();
+        markDying([...selection]);
+        notes = notes.filter(n => !selection.has(n._key));
+        selection.clear();
+        requestDraw();
+        return;
+      }
       if (cmd && k === "c") { e.preventDefault(); copySelection(); return; }
       if (cmd && k === "v") { e.preventDefault(); pasteClipboard(marker != null ? marker : pasteAt); return; }
       if (cmd && k === "d") { e.preventDefault(); duplicateSelection(); return; }
@@ -1656,7 +3019,8 @@
       // Arrow keys: ←/→ nudge by grid; ↑/↓ transpose a semitone (Shift = octave).
       if (!cmd && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
         e.preventDefault();
-        nudgeSelection(e.key === "ArrowRight" ? 1 : -1);
+        if (e.shiftKey) resizeSelection(e.key === "ArrowRight" ? 1 : -1);
+        else nudgeSelection(e.key === "ArrowRight" ? 1 : -1);
         return;
       }
       if (!cmd && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
@@ -1684,6 +3048,8 @@
         return;
       }
       if (e.key === "Escape") {
+        const _so = document.getElementById("settings-overlay");
+        if (_so && _so.classList.contains("show")) { _so.classList.remove("show"); return; }
         if (ctxMenu.style.display === "block") { hideCtxMenu(); return; }
         if (playing) { stopPlayback(); return; }
         flushLiveApply(); // keep writes; flush the last edit before closing
@@ -1693,6 +3059,7 @@
       if (e.key === "Delete" || e.key === "Backspace") {
         if (selection.size) {
           pushUndo();
+          markDying([...selection]);
           notes = notes.filter(n => !selection.has(n._key));
           selection.clear();
           requestDraw();
@@ -1743,6 +3110,7 @@
       addItem("Delete", null, () => {
         pushUndo();
         const set = new Set(keys);
+        markDying(keys);
         notes = notes.filter(n => !set.has(n._key));
         selection = new Set([...selection].filter(key => !set.has(key)));
         requestDraw();
@@ -1758,8 +3126,79 @@
     // ---- Toolbar ----
     const artSelect = document.getElementById("art-select");
     const snapSelect = document.getElementById("snap-select");
+    const bankSelect = document.getElementById("bank-select");
     const mapOverlay = document.getElementById("map-overlay");
     document.getElementById("clip-name").textContent = DATA.clip.name || "Clip";
+
+    function fillBankSelect() {
+      bankSelect.innerHTML = "";
+      banks.forEach((b, i) => {
+        const o = document.createElement("option");
+        o.value = String(i); o.textContent = b.name;
+        bankSelect.appendChild(o);
+      });
+      bankSelect.value = String(currentBank);
+    }
+    // Switching banks swaps the active articulation set (legend, brush, 1–9 keys,
+    // map editor, colors). Existing notes are untouched — those whose articulation
+    // isn't in the new bank simply draw neutral-grey via artColor() until re-set.
+    function setBank(i) {
+      i = Math.max(0, Math.min(banks.length - 1, i | 0));
+      currentBank = i;
+      artMap = banks[i].articulations.map(a => ({ ...a, _colorIdx: a._colorIdx != null ? a._colorIdx : _colorCounter++ }));
+      currentArt = artMap.length ? artMap[0].name : null;
+      bankSelect.value = String(i);
+      fillArtSelect();
+      renderLegend();
+      requestDraw();
+    }
+    bankSelect.addEventListener("change", () => setBank(+bankSelect.value));
+
+    // Colour-scheme switcher — recolors the articulation palette only (notes,
+    // Key legend, lanes, keyswitch visualiser). Independent of the UI Theme.
+    const colorsSelect = document.getElementById("colors-select");
+    if (colorsSelect) {
+      colorsSelect.value = colorScheme;
+      colorsSelect.addEventListener("change", () => {
+        colorScheme = COLOR_SCHEMES[colorsSelect.value] ? colorsSelect.value : "Spectrum";
+        try { localStorage.setItem("artroll-colors-v1", colorScheme); } catch (e) {}
+        renderLegend();
+        requestDraw();
+      });
+    }
+
+    // Theme switcher — purely visual. Themes override the --p-live-* base vars on
+    // <html>; the --c-* tokens are oklch-derived from those, so the whole UI (and
+    // canvas, which reads cssVar()) recolors. Default "Studio" = no attribute.
+    const themeSelect = document.getElementById("theme-select");
+    if (themeSelect) {
+      themeSelect.addEventListener("change", () => {
+        const t = themeSelect.value;
+        if (t === "Studio") document.documentElement.removeAttribute("data-theme");
+        else document.documentElement.setAttribute("data-theme", t);
+        requestDraw();
+      });
+    }
+
+    // ---- Control-lane switcher (Phase 1): Velocity <-> CC automation envelopes ----
+    // A compact chooser floating at the lower lane's gutter. Its y tracks the lane
+    // (anchored to the bottom of the stage), repositioned on every resize.
+    const laneSelect = document.getElementById("lane-select");
+    const laneSwitch = document.getElementById("lane-switch");
+    function positionLaneSwitch() {
+      if (!laneSwitch) return;
+      if (VEL_LANE <= 0) { laneSwitch.classList.remove("show"); return; }   // lane hidden in settings
+      laneSwitch.classList.add("show");
+      laneSwitch.style.left = (GUTTER + 4) + "px";
+      laneSwitch.style.top = ((viewH - BOTTOM()) + 3) + "px";
+    }
+    if (laneSelect) {
+      laneSelect.value = laneMode;
+      laneSelect.addEventListener("change", () => {
+        laneMode = laneSelect.value;
+        requestDraw();
+      });
+    }
 
     function fillArtSelect() {
       artSelect.innerHTML = "";
@@ -1782,6 +3221,7 @@
       mouse: document.getElementById("tool-mouse"),
       pencil: document.getElementById("tool-pencil"),
       cut: document.getElementById("tool-cut"),
+      brush: document.getElementById("tool-brush"),
     };
     // Razor cursor for the Cut tool — blade tip = hotspot (bottom-left).
     const CUT_CURSOR = 'url("data:image/svg+xml;utf8,' + encodeURIComponent(
@@ -1790,7 +3230,7 @@
       + '<path d="M12.7 9.3 L17.5 4.5 a2.1 2.1 0 0 1 3 3 L15.2 11.8 Z" fill="#8c8c8c" stroke="#141414" stroke-width="1"/>'
       + '</svg>') + '") 2 20, crosshair';
     function toolCursor(t) {
-      return t === "pencil" ? "crosshair" : (t === "cut" ? CUT_CURSOR : "default");
+      return t === "pencil" || t === "brush" ? "crosshair" : (t === "cut" ? CUT_CURSOR : "default");
     }
     function setTool(t) {
       tool = t;
@@ -1801,14 +3241,7 @@
     toolButtons.mouse.onclick = () => setTool("mouse");
     toolButtons.pencil.onclick = () => setTool("pencil");
     toolButtons.cut.onclick = () => setTool("cut");
-
-    // Articulation Selector Mode toggle
-    const selectorToggle = document.getElementById("selector-toggle");
-    selectorToggle.onclick = () => {
-      selectorMode = !selectorMode;
-      selectorToggle.classList.toggle("toggled", selectorMode);
-      selectorToggle.textContent = "Art. select: " + (selectorMode ? "on" : "off");
-    };
+    toolButtons.brush.onclick = () => setTool("brush");
 
     // Snap-to-Scale toggle. Disabled (and labelled) when the host couldn't read
     // a scale; otherwise the title surfaces the scale name.
@@ -1830,44 +3263,399 @@
 
     // Cancel = close, KEEP live-applied writes (undo them via Live's own Cmd+Z).
     // Flush so the last edit within the debounce window isn't lost.
-    document.getElementById("cancel-btn").onclick = () => { stopPlayback(); flushLiveApply(); closeWith({ type: "cancel" }); };
-    document.getElementById("apply-btn").onclick = () => {
-      stopPlayback();
-      closeWith({ type: "apply", notes: serializeNotes() });
+    // cancel-btn removed; Esc still closes via keydown handler
+
+    // ---- Help / shortcuts overlay ----
+    const helpOverlay = document.getElementById("help-overlay");
+    function openHelp() { hideCtxMenu(); closeMapEditor(); closeSettings(); helpOverlay.classList.add("show"); }
+    function closeHelp() { helpOverlay.classList.remove("show"); }
+    function closeSettings() { const so = document.getElementById("settings-overlay"); if (so) so.classList.remove("show"); }
+    document.getElementById("help-btn").onclick = () => {
+      if (helpOverlay.classList.contains("show")) closeHelp();
+      else openHelp();
     };
+    document.getElementById("help-close").onclick = closeHelp;
+    helpOverlay.addEventListener("click", e => { if (e.target === helpOverlay) closeHelp(); });
 
     // ---- Map editor ----
-    document.getElementById("edit-map").onclick = openMapEditor;
+    document.getElementById("dedupe-btn").onclick = () => {
+      const pre = snapState();
+      // Group by pitch, sorted by startTime; remove any note that starts before the previous one ends.
+      const byPitch = {};
+      for (const n of notes) {
+        if (!byPitch[n.pitch]) byPitch[n.pitch] = [];
+        byPitch[n.pitch].push(n);
+      }
+      const toRemove = new Set();
+      for (const row of Object.values(byPitch)) {
+        row.sort((a, b) => a.startTime - b.startTime);
+        let prevEnd = -Infinity;
+        for (const n of row) {
+          if (n.startTime < prevEnd - 1e-6) {
+            toRemove.add(n._key);
+          } else {
+            prevEnd = n.startTime + n.duration;
+          }
+        }
+      }
+      if (!toRemove.size) return;
+      markDying([...toRemove]);
+      notes = notes.filter(n => !toRemove.has(n._key));
+      selection = new Set([...selection].filter(k => !toRemove.has(k)));
+      pushUndoState(pre);
+      requestDraw();
+    };
+    document.getElementById("edit-map").onclick = () => {
+      if (mapOverlay.classList.contains("show")) closeMapEditor();
+      else openMapEditor();
+    };
     document.getElementById("map-cancel").onclick = closeMapEditor;
+    document.getElementById("map-close").onclick = closeMapEditor;
     document.getElementById("map-add").onclick = () => {
       const maxPitch = artMap.reduce((m, a) => Math.max(m, a.pitch ?? 0), -1);
-      artMap.push({ name: "New", pitch: Math.min(127, maxPitch + 1) });
+      artMap.push({ name: "New", pitch: Math.min(127, maxPitch + 1), _colorIdx: _colorCounter++ });
       renderMapRows();
+      syncArtUI();
+    };
+    document.getElementById("map-autopitch").onclick = () => {
+      if (!artMap.length) return;
+      const base = artMap[0].pitch ?? 0;
+      artMap.forEach((a, i) => { a.pitch = Math.min(127, base + i); });
+      renderMapRows();
+      syncArtUI();
     };
     document.getElementById("map-save").onclick = () => closeWith({ type: "save-map", map: artMap });
 
-    function openMapEditor() { renderMapRows(); mapOverlay.classList.add("show"); }
+    // ---- Map editor row selection (Finder-style highlight) ----
+    let mapSel = new Set();   // selected row indices
+    let mapAnchor = null;     // last-clicked row, for shift-range
+    function paintMapSel() {
+      document.querySelectorAll("#map-columns tbody tr").forEach(tr => {
+        tr.classList.toggle("sel", mapSel.has(+tr.dataset.row));
+      });
+      updateMapSelCount();
+    }
+    function updateMapSelCount() {
+      const n = mapSel.size;
+      const total = artMap.length;
+      const lbl = document.getElementById("map-sel-count");
+      if (lbl) lbl.textContent = n ? n + " selected" : "";
+      const del = document.getElementById("map-delsel");
+      if (del) del.disabled = n === 0;
+      const selall = document.getElementById("map-selall");
+      if (selall) selall.textContent = (total && n === total) ? "Deselect all" : "Select all";
+    }
+    document.getElementById("map-selall").onclick = () => {
+      if (mapSel.size === artMap.length) mapSel = new Set();
+      else mapSel = new Set(artMap.map((_, i) => i));
+      mapAnchor = null;
+      paintMapSel();
+    };
+    document.getElementById("map-delsel").onclick = () => {
+      const idxs = [...mapSel].sort((a, b) => b - a);  // descending so splices don't shift survivors
+      if (!idxs.length) return;
+      idxs.forEach(i => artMap.splice(i, 1));
+      mapSel = new Set();
+      mapAnchor = null;
+      renderMapRows();
+      syncArtUI();
+    };
+
+    // ---- Keyswitch keyboard visualiser (C-2 to C2, MIDI 0–24) ----
+    function renderMapKeyboard() {
+      const canvas = document.getElementById("map-keyboard");
+      if (!canvas) return;
+      const DPR = window.devicePixelRatio || 1;
+      const WW = 48, BW = 28, WH = 90, BH = 56, TH = WH + 1;
+      const MIN_PITCH = 0, MAX_PITCH = 36;
+      // White-key x positions for pitches 0–36
+      const wkX = {};
+      let wTotal = 0;
+      for (let p = MIN_PITCH; p <= MAX_PITCH; p++) { if (!BLACK[p % 12]) { wkX[p] = wTotal; wTotal += WW; } }
+      canvas.width  = wTotal * DPR;
+      canvas.height = TH * DPR;
+      canvas.style.width  = wTotal + "px";
+      canvas.style.height = TH + "px";
+      const c = canvas.getContext("2d");
+      c.scale(DPR, DPR);
+      c.clearRect(0, 0, wTotal, TH);
+      // Pitch → {name, idx}
+      const pitchArt = {};
+      artMap.forEach((a, idx) => {
+        const p = (typeof a.pitch === "number" && a.pitch >= MIN_PITCH && a.pitch <= MAX_PITCH) ? a.pitch : null;
+        if (p !== null) pitchArt[p] = { name: a.name, idx };
+      });
+      const getBX = p => { let q = p - 1; while (q >= MIN_PITCH && BLACK[q % 12]) q--; return q >= MIN_PITCH ? wkX[q] + WW - BW / 2 : 0; };
+      // White keys
+      for (let p = MIN_PITCH; p <= MAX_PITCH; p++) {
+        if (BLACK[p % 12]) continue;
+        const x = wkX[p], art = pitchArt[p];
+        c.fillStyle = art ? artColor(art.name, 0.85) : "#d2d2d2";
+        c.fillRect(x + 0.5, 0.5, WW - 1, WH - 1);
+        c.strokeStyle = art ? "rgba(0,0,0,0.25)" : "#aaa"; c.lineWidth = 0.5;
+        c.strokeRect(x + 0.5, 0.5, WW - 1, WH - 1);
+        if (p % 12 === 0 && !art) {
+          c.fillStyle = "#888"; c.font = "10px sans-serif";
+          c.textAlign = "center"; c.textBaseline = "bottom";
+          c.fillText(pitchName(p), x + WW / 2, WH - 2);
+        }
+      }
+      // Black keys
+      for (let p = MIN_PITCH; p <= MAX_PITCH; p++) {
+        if (!BLACK[p % 12]) continue;
+        const bx = getBX(p), art = pitchArt[p];
+        if (art) {
+          c.fillStyle = artColor(art.name, 0.92);
+        } else {
+          const g = c.createLinearGradient(bx, 0, bx, BH);
+          g.addColorStop(0, "#303030"); g.addColorStop(1, "#0e0e0e");
+          c.fillStyle = g;
+        }
+        c.fillRect(bx, 0, BW, BH);
+        c.strokeStyle = "rgba(0,0,0,0.6)"; c.lineWidth = 0.5;
+        c.strokeRect(bx + 0.5, 0.5, BW - 1, BH - 1);
+      }
+      // Numbered pins on highlighted keys
+      artMap.forEach((a, idx) => {
+        const p = (typeof a.pitch === "number" && a.pitch >= MIN_PITCH && a.pitch <= MAX_PITCH) ? a.pitch : null;
+        if (p === null) return;
+        const isBlack = BLACK[p % 12];
+        const kx = isBlack ? getBX(p) + BW / 2 : wkX[p] + WW / 2;
+        const ky = isBlack ? 18 : WH - 16;
+        const r = isBlack ? 10 : 12;
+        const label = String(idx + 1);
+        c.beginPath(); c.arc(kx, ky, r, 0, Math.PI * 2);
+        c.fillStyle = "rgba(255,255,255,0.93)"; c.fill();
+        c.strokeStyle = artColor(a.name, 0.7); c.lineWidth = 1.5; c.stroke();
+        c.fillStyle = "rgba(0,0,0,0.82)";
+        c.font = "bold " + (label.length > 1 ? "14" : "16") + "px sans-serif";
+        c.textAlign = "center"; c.textBaseline = "middle";
+        c.fillText(label, kx, ky);
+      });
+      // Click: focus the pitch input for the clicked articulation row
+      if (canvas._mapKbClick) canvas.removeEventListener("click", canvas._mapKbClick);
+      canvas._mapKbClick = ev => {
+        const r = canvas.getBoundingClientRect();
+        const mx = (ev.clientX - r.left) / r.width * wTotal;
+        const my = (ev.clientY - r.top) / r.height * TH;
+        let hit = null;
+        for (let p = 36; p >= 0 && hit === null; p--) { if (!BLACK[p % 12]) continue; const bx = getBX(p); if (mx >= bx && mx <= bx + BW && my <= BH) hit = p; }
+        for (let p = 36; p >= 0 && hit === null; p--) { if (BLACK[p % 12]) continue; if (mx >= wkX[p] && mx <= wkX[p] + WW) hit = p; }
+        if (hit === null) return;
+        const ai = artMap.findIndex(a => a.pitch === hit);
+        if (ai >= 0) {
+          const inp = [...document.querySelectorAll("#map-columns input[data-k='pitch']")].find(el => +el.dataset.i === ai);
+          if (inp) { inp.focus(); inp.select(); }
+        }
+      };
+      canvas.addEventListener("click", canvas._mapKbClick);
+      // Hover tooltip
+      if (canvas._mapKbMove) canvas.removeEventListener("mousemove", canvas._mapKbMove);
+      canvas._mapKbMove = ev => {
+        const r = canvas.getBoundingClientRect();
+        const mx = (ev.clientX - r.left) / r.width * wTotal;
+        const my = (ev.clientY - r.top) / r.height * TH;
+        let hit = null;
+        for (let p = 36; p >= 0 && hit === null; p--) { if (!BLACK[p % 12]) continue; const bx = getBX(p); if (mx >= bx && mx <= bx + BW && my <= BH) hit = p; }
+        for (let p = 36; p >= 0 && hit === null; p--) { if (BLACK[p % 12]) continue; if (mx >= wkX[p] && mx <= wkX[p] + WW) hit = p; }
+        const art = hit !== null ? pitchArt[hit] : null;
+        canvas.title = art
+          ? art.name + " \u2014 " + pitchName(hit) + " (MIDI " + hit + ") \u00b7 click to focus row"
+          : hit !== null ? pitchName(hit) + " (MIDI " + hit + ")" : "";
+      };
+      canvas.addEventListener("mousemove", canvas._mapKbMove);
+    }
+
+    function openMapEditor() {
+      closeHelp(); closeSettings();
+      mapSel = new Set(); mapAnchor = null;
+      mapOverlay.classList.add("show");
+      renderMapRows(); // renderMapKeyboard() is called at the end of renderMapRows
+      // Auto-scroll the keyboard to centre on the keyswitch cluster (needs layout)
+      requestAnimationFrame(() => {
+        const MIN_PITCH = 0, MAX_PITCH = 36;
+        const WW = 48, BW = 28, wX = {};
+        let wt = 0;
+        for (let p = MIN_PITCH; p <= MAX_PITCH; p++) { if (!BLACK[p % 12]) { wX[p] = wt; wt += WW; } }
+        const gx = p => { if (!BLACK[p % 12]) return wX[p]; let q = p - 1; while (q >= MIN_PITCH && BLACK[q % 12]) q--; return q >= MIN_PITCH ? wX[q] + WW - BW / 2 : 0; };
+        const ps = artMap.filter(a => typeof a.pitch === "number").map(a => a.pitch);
+        if (ps.length) {
+          const x0 = gx(Math.min(...ps)), x1 = gx(Math.max(...ps)) + WW;
+          const sc = document.getElementById("map-kb-scroll");
+          if (sc) sc.scrollLeft = Math.max(0, (x0 + x1) / 2 - sc.offsetWidth / 2);
+        }
+      });
+    }
     function closeMapEditor() { mapOverlay.classList.remove("show"); }
     function renderMapRows() {
-      const tbody = document.getElementById("map-rows");
-      tbody.innerHTML = "";
+      const container = document.getElementById("map-columns");
+      container.innerHTML = "";
+      let dragSrcIdx = null;
+
+      // Lay articulations out in columns of up to PER_COL rows. Extra rows flow
+      // into a fresh column to the right instead of growing one tall list.
+      const PER_COL = 16;
+      const nCols = Math.max(1, Math.ceil(artMap.length / PER_COL));
+      const bodies = [];
+      for (let c = 0; c < nCols; c++) {
+        const table = document.createElement("table");
+        table.className = "map-col";
+        const thead = document.createElement("thead");
+        thead.innerHTML = '<tr><th style="width:18px"></th><th>Articulation</th><th>Pitch</th><th style="width:40px">Note</th><th>Hold</th><th></th></tr>';
+        const tb = document.createElement("tbody");
+        table.append(thead, tb);
+        container.appendChild(table);
+        bodies.push(tb);
+      }
+
       artMap.forEach((a, i) => {
+        const tbody = bodies[Math.floor(i / PER_COL)];
         const tr = document.createElement("tr");
-        tr.innerHTML =
-          '<td><input class="alx-input" data-i="' + i + '" data-k="name" value="' + (a.name ?? "") + '" /></td>' +
-          '<td><input class="alx-input pitch" type="number" min="0" max="127" data-i="' + i + '" data-k="pitch" value="' + (a.pitch ?? 0) + '" /></td>' +
-          '<td class="pname">' + pitchName(a.pitch) + '</td>' +
-          '<td><input type="checkbox" data-i="' + i + '" data-k="hold" ' + (a.hold ? "checked" : "") + ' /></td>' +
-          '<td><button class="alx-button small" data-del="' + i + '">✕</button></td>';
+        tr.dataset.row = i;
+        if (mapSel.has(i)) tr.classList.add("sel");
+
+        // ── Drag handle (only the span is draggable — inputs stay fully interactive) ──
+        const handleTd = document.createElement("td");
+        handleTd.style.cssText = "padding:0 4px 0 2px;";
+        const handleSpan = document.createElement("span");
+        handleSpan.className = "map-handle";
+        handleSpan.draggable = true;
+        handleSpan.style.cssText = "cursor:grab;color:var(--c-text-secondary);user-select:none;font-size:13px;display:inline-block;";
+        handleSpan.title = "Drag to reorder";
+        handleSpan.textContent = "⠿";
+        handleTd.appendChild(handleSpan);
+        tr.appendChild(handleTd);
+
+        // ── Name ──
+        const nameTd = document.createElement("td");
+        nameTd.style.paddingRight = "3px";
+        const nameInput = document.createElement("input");
+        nameInput.className = "alx-input"; nameInput.dataset.i = i; nameInput.dataset.k = "name";
+        nameInput.value = a.name ?? "";
+        nameTd.appendChild(nameInput); tr.appendChild(nameTd);
+
+        // ── Pitch ──
+        const pitchTd = document.createElement("td");
+        pitchTd.style.paddingRight = "3px";
+        const pitchInput = document.createElement("input");
+        pitchInput.className = "alx-input pitch"; pitchInput.type = "number";
+        pitchInput.min = 0; pitchInput.max = 127;
+        pitchInput.dataset.i = i; pitchInput.dataset.k = "pitch";
+        pitchInput.value = a.pitch ?? 0;
+        pitchTd.appendChild(pitchInput); tr.appendChild(pitchTd);
+
+        // ── Note name (read-only) ──
+        const pnameTd = document.createElement("td");
+        pnameTd.className = "pname";
+        pnameTd.style.paddingRight = "3px";
+        pnameTd.style.width = "40px";
+        pnameTd.textContent = pitchName(a.pitch);
+        tr.appendChild(pnameTd);
+
+        // ── Hold ──
+        const holdTd = document.createElement("td");
+        holdTd.style.paddingLeft = "12px";
+        const holdCheck = document.createElement("input");
+        holdCheck.type = "checkbox"; holdCheck.dataset.i = i; holdCheck.dataset.k = "hold";
+        holdCheck.checked = !!a.hold;
+        holdTd.appendChild(holdCheck); tr.appendChild(holdTd);
+
+        // ── Delete ──
+        const delTd = document.createElement("td");
+        const delBtn = document.createElement("button");
+        delBtn.className = "alx-button small"; delBtn.dataset.del = i; delBtn.textContent = "✕";
+        delBtn.onclick = () => { artMap.splice(+delBtn.dataset.del, 1); mapSel = new Set(); mapAnchor = null; renderMapRows(); syncArtUI(); };
+        delTd.appendChild(delBtn); tr.appendChild(delTd);
+
         tbody.appendChild(tr);
+
+        // ── Drag-to-reorder ──
+        // Pitches are positional (stay at their index); names + hold flags travel with the articulation.
+        handleSpan.addEventListener("dragstart", e => {
+          dragSrcIdx = i;
+          e.dataTransfer.effectAllowed = "move";
+          setTimeout(() => { tr.style.opacity = "0.38"; }, 0);
+        });
+        handleSpan.addEventListener("dragend", () => {
+          tr.style.opacity = "";
+          container.querySelectorAll("tr").forEach(r => r.style.outline = "");
+        });
+        tr.addEventListener("dragover", e => {
+          e.preventDefault(); e.dataTransfer.dropEffect = "move";
+          container.querySelectorAll("tr").forEach(r => r.style.outline = "");
+          if (dragSrcIdx !== null && dragSrcIdx !== i)
+            tr.style.outline = "1px solid var(--c-highlight--primary)";
+        });
+        tr.addEventListener("dragleave", () => { tr.style.outline = ""; });
+        tr.addEventListener("drop", e => {
+          e.preventDefault();
+          container.querySelectorAll("tr").forEach(r => r.style.outline = "");
+          if (dragSrcIdx === null || dragSrcIdx === i) { dragSrcIdx = null; return; }
+          const savedPitches = artMap.map(m => m.pitch);
+          const [moved] = artMap.splice(dragSrcIdx, 1);
+          artMap.splice(dragSrcIdx < i ? i - 1 : i, 0, moved);
+          artMap.forEach((m, idx) => { m.pitch = savedPitches[idx]; });
+          dragSrcIdx = null;
+          mapSel = new Set();
+          mapAnchor = null;
+          renderMapRows();
+          syncArtUI();
+        });
+
+        // ── Change listeners ──
+        [nameInput, pitchInput, holdCheck].forEach(el => {
+          el.addEventListener("input", onMapEdit);
+          el.addEventListener("change", onMapEdit);
+        });
+
+        // ── Finder-style row selection (highlight) ──
+        // Plain click → select just this row · Shift → range from the anchor ·
+        // ⌘/Ctrl → toggle. Clicks on the handle / delete button are ignored so
+        // they keep their own behaviour; a plain click into an input still edits.
+        tr.addEventListener("mousedown", e => {
+          if (e.target.closest("button") || e.target.closest(".map-handle")) return;
+          const idx = +tr.dataset.row;
+          if (e.shiftKey && mapAnchor != null) {
+            e.preventDefault();
+            const lo = Math.min(mapAnchor, idx), hi = Math.max(mapAnchor, idx);
+            mapSel = new Set();
+            for (let k = lo; k <= hi; k++) mapSel.add(k);
+          } else if (e.metaKey || e.ctrlKey) {
+            e.preventDefault();
+            if (mapSel.has(idx)) mapSel.delete(idx); else mapSel.add(idx);
+            mapAnchor = idx;
+          } else {
+            mapSel = new Set([idx]);
+            mapAnchor = idx;
+          }
+          paintMapSel();
+        });
       });
-      tbody.querySelectorAll("input").forEach(el => {
-        el.addEventListener("input", onMapEdit);
-        el.addEventListener("change", onMapEdit);
+
+      // ── Vertical Tab within each column (name↓ → pitch↓, Shift reverses) ──
+      const nameInputs  = [...container.querySelectorAll("input[data-k='name']")];
+      const pitchInputs = [...container.querySelectorAll("input[data-k='pitch']")];
+      [...nameInputs, ...pitchInputs].forEach(el => {
+        el.addEventListener("keydown", e => {
+          if (e.key !== "Tab") return;
+          const col = el.dataset.k === "name" ? nameInputs : pitchInputs;
+          const idx = col.indexOf(el);
+          const next = col[idx + (e.shiftKey ? -1 : 1)];
+          if (next) {
+            e.preventDefault(); next.focus(); if (next.select) next.select();
+          } else if (!e.shiftKey && el.dataset.k === "name") {
+            // End of name column → jump to first pitch
+            e.preventDefault(); pitchInputs[0]?.focus(); pitchInputs[0]?.select?.();
+          } else if (e.shiftKey && el.dataset.k === "pitch" && idx === 0) {
+            // Shift-Tab from first pitch → jump to last name
+            e.preventDefault();
+            const last = nameInputs[nameInputs.length - 1];
+            last?.focus(); last?.select?.();
+          }
+        });
       });
-      tbody.querySelectorAll("button[data-del]").forEach(b => {
-        b.onclick = () => { artMap.splice(+b.dataset.del, 1); renderMapRows(); };
-      });
+      renderMapKeyboard();
+      updateMapSelCount();
     }
     function onMapEdit(e) {
       const i = +e.target.dataset.i, k = e.target.dataset.k;
@@ -1879,6 +3667,17 @@
       } else {
         artMap[i].name = e.target.value;
       }
+      renderMapKeyboard();
+      syncArtUI();
+    }
+    // Keep everything that reads the map in sync with the edit-map table:
+    // the toolbar's Artic. selector, the Key legend/hotkeys, and the saved bank.
+    function syncArtUI() {
+      banks[currentBank].articulations = artMap.map(a => ({ ...a }));
+      if (currentArt && !artMap.some(a => a.name === currentArt))
+        currentArt = artMap.length ? artMap[0].name : null;
+      fillArtSelect();
+      renderLegend();
     }
 
     // ---- Legend + status bar (Wave C) ----
@@ -1893,24 +3692,59 @@
     const gridLabel = () => GRID_LABELS[String(snap)] ?? String(snap);
 
     function renderLegend() {
+      // keep the live "active brush" swatch beside the selector in sync
+      const aw = document.getElementById("art-swatch");
+      if (aw) {
+        const c = currentArt ? artColor(currentArt) : "transparent";
+        aw.style.background = c;
+        aw.style.color = c;
+      }
       const host = document.getElementById("legend-chips");
       if (!host) return;
       host.innerHTML = "";
-      if (!artMap.length) {
+      // Only show articulations that have a real name — hide freshly-added "New"
+      // (and blank) rows until they're renamed in the map editor.
+      const named = artMap.map((a, i) => ({ a, i })).filter(({ a }) => a.name && a.name !== "New");
+      if (!named.length) {
         const e = document.createElement("span");
         e.className = "legend-empty";
         e.textContent = "No articulations — Edit map… to add some";
         host.appendChild(e);
         return;
       }
-      artMap.forEach((a, i) => {
+      named.forEach(({ a, i }) => {
         const chip = document.createElement("div");
         chip.className = "legend-chip" + (a.name === currentArt ? " current" : "");
-        chip.title = "Select all “" + a.name + "” notes (key " + (i + 1) + ")";
-        const num = document.createElement("span"); num.className = "num"; num.textContent = String(i + 1);
+        // Hotkeys are keys 1–9 → artMap[i]; articulations past the 9th keep their
+        // number but have no single-key shortcut.
+        const hasKey = i < 9;
+        chip.title = hasKey
+          ? "Press " + (i + 1) + " to apply “" + a.name + "” to selected notes · click to select all " + a.name + " notes"
+          : "#" + (i + 1) + " — click to select all “" + a.name + "” notes (only 1–9 have a keyboard shortcut)";
+        const num = document.createElement("span");
+        num.className = "num";
+        num.textContent = String(i + 1);
         const sw = document.createElement("span"); sw.className = "swatch"; sw.style.background = artColor(a.name);
         const nm = document.createElement("span"); nm.textContent = a.name;
         chip.append(num, sw, nm);
+        // DEMO-ONLY: drag an audio file onto a chip to hear that articulation
+        chip.title += " · drop an audio file to set its preview sound";
+        chip.addEventListener("dragover", ev => { ev.preventDefault(); });
+        chip.addEventListener("drop", async ev => {
+          ev.preventDefault();
+          const f = ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0];
+          if (f) { try { await DEMO_SAMPLER.set(a.name, f); } catch (_) {} }
+          renderLegend();
+        });
+        if (DEMO_SAMPLER.has(a.name)) {
+          const badge = document.createElement("span");
+          badge.textContent = "♪";
+          badge.title = "Sample loaded — click to remove";
+          badge.style.cssText = "color:" + cssVar("--c-highlight--primary") + ";cursor:pointer;margin-left:1px;";
+          badge.addEventListener("mousedown", ev => ev.stopPropagation());
+          badge.addEventListener("click", async ev => { ev.stopPropagation(); await DEMO_SAMPLER.clear(a.name); renderLegend(); });
+          chip.appendChild(badge);
+        }
         // keep canvas focus (don't steal it on mousedown), select-by-art on click
         chip.addEventListener("mousedown", ev => ev.preventDefault());
         chip.addEventListener("click", () => {
@@ -1932,8 +3766,10 @@
 
     // ---- Init ----
     function init() {
+      fillBankSelect();
       fillArtSelect();
       renderLegend();
+      DEMO_SAMPLER.loadAll().then(() => DEMO_SAMPLER.loadDefaults()).then(renderLegend); // DEMO-ONLY: restore saved samples, then bundled defaults; show ♪ badges
       snapSelect.value = String(snap);
       setTool("mouse");
       resize();
@@ -1946,6 +3782,45 @@
       clampScroll();
       requestDraw();
     }
+    // ---- Grid settings panel wiring ----
+    (function() {
+      const GRID_DEFAULTS = { rowH: 16, gutter: 44, velLane: 56 };
+      function saveGridSettings() {
+        try { localStorage.setItem("artroll-grid-v1", JSON.stringify({ rowH: ROW_H, gutter: GUTTER, velLane: VEL_LANE })); } catch(e) {}
+      }
+      function refreshSeg(segId, val) {
+        document.getElementById(segId).querySelectorAll("button").forEach(b => b.classList.toggle("s-active", +b.dataset.val === val));
+      }
+      function refreshSettingsUI() {
+        refreshSeg("row-height-seg", ROW_H);
+        refreshSeg("piano-width-seg", GUTTER);
+        refreshSeg("vel-lane-seg", VEL_LANE);
+      }
+      function applyAndRedraw() { resize(); clampScroll(); requestDraw(); }
+      function wireSeg(segId, setVal) {
+        document.getElementById(segId).querySelectorAll("button").forEach(btn => {
+          btn.onclick = () => { setVal(+btn.dataset.val); saveGridSettings(); refreshSettingsUI(); applyAndRedraw(); };
+        });
+      }
+      wireSeg("row-height-seg", v => { ROW_H = v; });
+      wireSeg("piano-width-seg", v => { GUTTER = v; });
+      wireSeg("vel-lane-seg", v => { VEL_LANE = v; });
+
+      const settingsBtn = document.getElementById("settings-btn");
+      const settingsOverlay = document.getElementById("settings-overlay");
+      settingsBtn.onclick = () => {
+        const opening = !settingsOverlay.classList.contains("show");
+        if (opening) { closeHelp(); closeMapEditor(); }
+        settingsOverlay.classList.toggle("show", opening);
+        if (opening) refreshSettingsUI();
+      };
+      document.getElementById("settings-close").onclick = () => settingsOverlay.classList.remove("show");
+      document.getElementById("settings-reset").onclick = () => {
+        ROW_H = GRID_DEFAULTS.rowH; GUTTER = GRID_DEFAULTS.gutter; VEL_LANE = GRID_DEFAULTS.velLane;
+        saveGridSettings(); refreshSettingsUI(); applyAndRedraw();
+      };
+    })();
+
     window.addEventListener("resize", resize);
     init();
   </script>
