@@ -164,18 +164,18 @@
     body { font-size: 12px; }
 
     .toolbar {
-      gap: 0.35em; padding: 0.4em 0.6em; flex-wrap: wrap; row-gap: 0.35em;
+      gap: 0.3em; padding: 0.32em 0.55em; flex-wrap: wrap; row-gap: 0.3em;
       background: linear-gradient(180deg,
-        oklch(from var(--c-control-bg--500) calc(l * 1.14) c h),
+        oklch(from var(--c-control-bg--500) calc(l * 1.06) c h),
         var(--c-bg--0500));
       box-shadow: inset 0 -1px 0 oklch(from var(--c-control-border) l c h / 0.7);
     }
-    /* grouped clusters of controls, each in a soft well with an uppercase label */
+    /* grouped clusters of controls — tight, flat wells like Ableton's control bar */
     .tgroup {
-      display: inline-flex; align-items: center; gap: 0.3em;
-      padding: 0 0.4em; height: 28px; border-radius: 8px;
-      background: oklch(from var(--c-bg--0500) calc(l * 0.84) c h);
-      border: 1px solid oklch(from var(--c-control-border) l c h / 0.7);
+      display: inline-flex; align-items: center; gap: 0.28em;
+      padding: 0 0.35em; height: 26px; border-radius: 4px;
+      background: oklch(from var(--c-bg--0500) calc(l * 0.9) c h);
+      border: 1px solid oklch(from var(--c-control-border) l c h / 0.55);
     }
     .tgroup > .glabel {
       font-size: 0.76rem; letter-spacing: 0.05em; text-transform: uppercase;
@@ -183,7 +183,7 @@
     }
 
     .alx-button {
-      height: 22px; border-radius: 6px; padding: 0 0.6em;
+      height: 22px; border-radius: 4px; padding: 0 0.6em;
       display: inline-flex; align-items: center; gap: 0.42em;
       transition: background-color .12s ease, color .12s ease, box-shadow .14s ease, transform .06s ease;
     }
@@ -194,14 +194,14 @@
     .alx-button .ic { width: 14px; height: 14px; display: block; flex: 0 0 auto; }
     .alx-button.tool.active {
       box-shadow: 0 0 0 1px var(--c-highlight--primary),
-                  0 0 13px oklch(from var(--c-highlight--primary) l c h / 0.6);
+                  0 0 8px oklch(from var(--c-highlight--primary) l c h / 0.45);
     }
-    .alx-button.toggled { box-shadow: 0 0 11px oklch(from var(--c-highlight--primary) l c h / 0.55); }
+    .alx-button.toggled { box-shadow: 0 0 7px oklch(from var(--c-highlight--primary) l c h / 0.4); }
     .alx-button.primary {
       font-weight: 600;
-      box-shadow: 0 0 15px oklch(from var(--c-highlight--primary) l c h / 0.5);
+      box-shadow: 0 0 9px oklch(from var(--c-highlight--primary) l c h / 0.4);
     }
-    .alx-input, select.alx-input { height: 22px; border-radius: 5px; }
+    .alx-input, select.alx-input { height: 22px; border-radius: 4px; }
     #play-btn { width: 26px; padding: 0; justify-content: center; }
     #play-btn .ic { width: 14px; height: 14px; }
 
@@ -238,13 +238,13 @@
        A recessed track holds one highlighted "pill" segment at a time. */
     .seg {
       display: inline-flex; align-items: center; gap: 2px; padding: 2px;
-      border-radius: 8px;
+      border-radius: 4px;
       background: oklch(from var(--c-bg--0500) calc(l * 0.7) c h);
       box-shadow: inset 0 1px 2px oklch(from var(--c-control-border) l c h / 0.9),
                   inset 0 0 0 1px oklch(from var(--c-control-border) l c h / 0.6);
     }
     .seg .alx-button.tool {
-      height: 21px; width: 27px; padding: 0; border-radius: 5px; border: 0;
+      height: 21px; width: 27px; padding: 0; border-radius: 3px; border: 0;
       justify-content: center;
       background: transparent; color: var(--c-text-secondary); box-shadow: none;
     }
@@ -257,7 +257,7 @@
       background: var(--c-highlight--primary);
       color: var(--c-control-on-foreground);
       box-shadow: 0 1px 2px oklch(from var(--c-control-border) l c h / 0.7),
-                  0 0 11px oklch(from var(--c-highlight--primary) l c h / 0.45);
+                  0 0 7px oklch(from var(--c-highlight--primary) l c h / 0.35);
     }
     .seg .alx-button.tool .ic { width: 14px; height: 14px; }
 
@@ -270,7 +270,7 @@
       color: var(--c-text-secondary); flex: 0 0 auto;
     }
     .legend-chip {
-      height: 23px; border-radius: 7px;
+      height: 22px; border-radius: 4px;
       transition: box-shadow .16s ease, background-color .12s ease, transform .08s ease;
     }
     .legend-chip:hover { transform: translateY(-1px); }
@@ -1345,9 +1345,12 @@
       drawLoopRegion();
       drawNotes();
       drawPlayhead();
-      drawOverlays();
       drawKeyboard();
       drawRuler();
+      // Overlays (the orange play-from locator + marquee) are clipped to the grid
+      // but drawn AFTER the keyboard/ruler so the locator isn't overpainted by the
+      // gutter divider when it sits at bar 1 (beat 0 == GUTTER's edge).
+      drawOverlays();
       if (laneMode === "velocity") drawVelLane();
       else drawCCLane(laneMode);
       drawLane();
@@ -1627,23 +1630,41 @@
       // Spans are DERIVED from the notes' art (see laneSpans) — the lane is an
       // honest preview of the keyswitch runs Apply will write. Painting in it
       // bulk re-articulates the notes inside the painted span.
+      // Each span is painted with the SAME material as the notes (see paintNote):
+      // a colour-matched outer bloom, a brighter inner core, and a stroke in a
+      // lifted version of the articulation colour — so the lane reads as the same
+      // glowing surface, not a flat legend strip.
+      const SPAN_R = 4;
+      ctx.textBaseline = "middle";
       for (const r of laneSpans()) {
         const x = beatToX(r.start), w = Math.max(2, (r.end - r.start) * pxPerBeat);
         if (x + w < GUTTER || x > GUTTER + gw) continue;
-        ctx.fillStyle = artColor(r.art, 0.6);
-        ctx.fillRect(x, ry, w, rh);
-        ctx.strokeStyle = cssVar("--c-control-border");
+        const glowCol = artColor(r.art, 1);
+        // outer bloom
+        ctx.shadowColor = glowCol;
+        ctx.shadowBlur = 12;
+        ctx.fillStyle = artColor(r.art, 0.92);
+        rrect(x, ry, w, rh, SPAN_R); ctx.fill();
+        ctx.shadowBlur = 0;
+        // brighter inner core
+        ctx.fillStyle = `oklch(from ${glowCol} calc(l * 1.3) c h / 0.55)`;
+        rrect(x + 1.5, ry + 1.5, Math.max(1, w - 3), Math.max(1, rh - 3), Math.max(1, SPAN_R - 1)); ctx.fill();
+        // colour-matched stroke
+        ctx.strokeStyle = `oklch(from ${glowCol} calc(l * 1.12) c h)`;
         ctx.lineWidth = 1;
-        ctx.strokeRect(Math.round(x) + 0.5, ry + 0.5, Math.round(w) - 1, rh - 1);
+        rrect(Math.round(x) + 0.5, ry + 0.5, Math.max(1, Math.round(w) - 1), rh - 1, SPAN_R); ctx.stroke();
         if (w > 24) {
-          ctx.fillStyle = "rgba(0,0,0,0.85)"; ctx.textAlign = "left";
-          ctx.fillText(r.art, x + 4, ry + rh / 2);
+          ctx.fillStyle = "rgba(0,0,0,0.9)"; ctx.textAlign = "left";
+          ctx.fillText(r.art, x + 5, ry + rh / 2);
         }
       }
       if (previewPaint) {
         const x = beatToX(previewPaint.s), w = Math.max(2, (previewPaint.e - previewPaint.s) * pxPerBeat);
-        ctx.fillStyle = artColor(currentArt, 0.4);
-        ctx.fillRect(x, ry, w, rh);
+        const glowCol = artColor(currentArt, 1);
+        ctx.shadowColor = glowCol; ctx.shadowBlur = 10;
+        ctx.fillStyle = artColor(currentArt, 0.5);
+        rrect(x, ry, w, rh, SPAN_R); ctx.fill();
+        ctx.shadowBlur = 0;
       }
       ctx.restore();
     }
@@ -1679,8 +1700,11 @@
         const px = Math.round(x) + 0.5;
         ctx.strokeStyle = col; ctx.lineWidth = selected ? 2 : 1;
         ctx.beginPath(); ctx.moveTo(px, base); ctx.lineTo(px, y); ctx.stroke();
+        // glow the head so it reads as the same lit material as the notes
         ctx.fillStyle = col;
+        ctx.shadowColor = col; ctx.shadowBlur = selected ? 9 : 6;
         ctx.beginPath(); ctx.arc(px, y, selected ? 3 : 2.2, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0;
       }
       ctx.lineWidth = 1;
       ctx.restore();
@@ -1752,32 +1776,42 @@
         }
         poly.push({ x: beatToX(clipDuration), y: ccValToY(pts[pts.length - 1].v) });
       }
-      // filled area under the curve
+      // filled area under the curve — a soft gradient that fades to the baseline,
+      // like Live's clip-envelope shading (not a flat slab).
       ctx.beginPath();
       ctx.moveTo(poly[0].x, baseY);
       for (const q of poly) ctx.lineTo(q.x, q.y);
       ctx.lineTo(poly[poly.length - 1].x, baseY);
       ctx.closePath();
-      ctx.fillStyle = `oklch(from ${accent} l c h / 0.16)`;
+      const fillGrad = ctx.createLinearGradient(0, top, 0, baseY);
+      fillGrad.addColorStop(0, `oklch(from ${accent} l c h / 0.26)`);
+      fillGrad.addColorStop(1, `oklch(from ${accent} l c h / 0.02)`);
+      ctx.fillStyle = fillGrad;
       ctx.fill();
-      // the curve
-      ctx.strokeStyle = accent; ctx.lineWidth = 1.5;
+      // the curve — a crisp, round-joined line (Live's automation reads as one
+      // clean stroke, no bloom).
+      ctx.strokeStyle = accent; ctx.lineWidth = 1.25;
+      ctx.lineJoin = "round"; ctx.lineCap = "round";
       ctx.beginPath();
       poly.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y));
       ctx.stroke();
-      // breakpoint handles — hidden while drawing or when freehand makes them dense,
-      // so a pencil-drawn envelope reads as a smooth line rather than a dotted run.
+      ctx.lineJoin = "miter"; ctx.lineCap = "butt";
+      // breakpoint handles — small solid dots with a thin ring cut from the lane
+      // background, the way Live draws envelope handles. They only grow + glow when
+      // grabbed; otherwise they sit quietly on the line. Hidden while drawing or
+      // when freehand makes them dense, so a pencil-drawn envelope reads as a line.
       const drawing = drag && (drag.mode === "cc-draw" || drag.mode === "cc-erase");
       if (!drawing && pts.length <= 64) for (const p of pts) {
         const x = beatToX(p.t), y = ccValToY(p.v);
         if (x < GUTTER - 6 || x > GUTTER + gw + 6) continue;
         const hot = drag && drag.ccPt === p;
+        const rr = hot ? 4 : 2.6;
+        if (hot) { ctx.shadowColor = accent; ctx.shadowBlur = 8; }
         ctx.fillStyle = accent;
-        ctx.shadowColor = accent; ctx.shadowBlur = hot ? 11 : 5;
-        ctx.beginPath(); ctx.arc(x, y, hot ? 4.6 : 3.2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.fill();
         ctx.shadowBlur = 0;
-        ctx.fillStyle = `oklch(from ${accent} calc(l * 1.4) c h)`;
-        ctx.beginPath(); ctx.arc(x, y, hot ? 2 : 1.4, 0, Math.PI * 2); ctx.fill();
+        ctx.lineWidth = 1; ctx.strokeStyle = cssVar("--c-control-bg--500");
+        ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.stroke();
       }
       ctx.lineWidth = 1;
       // value readout while dragging a point
