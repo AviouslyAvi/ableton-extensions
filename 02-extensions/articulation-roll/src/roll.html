@@ -368,7 +368,7 @@
     <span class="tgroup">
       <span class="glabel">Tools</span>
       <span class="seg" role="group" aria-label="Tool">
-        <button class="alx-button small tool" id="tool-mouse" title="Mouse (A): drag empty = select (Shift adds). Click empty = marker. Double-click empty = place + extend. Drag a note body = move (Option/Alt = off-grid). Drag a note edge = resize (Shift = uniform).">
+        <button class="alx-button small tool" id="tool-mouse" title="Mouse (A): drag empty = select (Shift adds). Click empty = marker. Double-click empty = place + extend. Drag a note body = move (Option/Alt = off-grid). Drag a note edge = resize (Shift = uniform, Option/Alt = off-grid).">
           <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2.5l8.2 7-3.5.55 2.1 4-1.7.85-2.1-4.05L3.2 13.2z"/></svg></button>
         <button class="alx-button small tool" id="tool-pencil" title="Pencil (B, FL-style): click places a note; drag moves it (Option/Alt = off-grid). Shift while dragging extends. Hold E for Cut.">
           <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 2.2l3.3 3.3L5.5 13.8 2 14.8l1-3.5z"/><path d="M9.2 3.5l3.3 3.3"/></svg></button>
@@ -2082,6 +2082,18 @@
     let lastClick = { t: 0, x: -99, y: -99 }; // manual double-press detection
     const DBL_MS = 350, DBL_PX = 5;
 
+    // Option/Alt = "don't snap" modifier. Some embedded webviews (Live's jweb)
+    // don't reliably stamp `altKey` onto mouse events, which silently kills the
+    // off-grid behaviour. So we ALSO track the key from keydown/keyup and OR the
+    // two together: altActive(e) is true if the live event reports Alt OR the key
+    // is currently held. Any event that DOES carry altKey re-syncs the flag, so
+    // it self-heals even if a keyup is missed (e.g. focus lost mid-drag).
+    let altDown = false;
+    window.addEventListener("keydown", e => { if (e.key === "Alt" || e.altKey) altDown = true; }, true);
+    window.addEventListener("keyup",   e => { if (e.key === "Alt" || !e.altKey) altDown = false; }, true);
+    window.addEventListener("blur",    () => { altDown = false; }, true);
+    const altActive = e => !!(e && e.altKey) || altDown;
+
     // Document-wide: the webview's native menu (Reload…) must never appear,
     // including over our own context menu or the toolbar.
     document.addEventListener("contextmenu", e => e.preventDefault());
@@ -2273,13 +2285,13 @@
       const pre = snapState();
       let pt = hit;
       if (!pt) {
-        const tt = e.altKey ? clampBeat(xToBeat(x)) : clampBeat(snapBeat(xToBeat(x)));
+        const tt = altActive(e) ? clampBeat(xToBeat(x)) : clampBeat(snapBeat(xToBeat(x)));
         pt = { t: tt, v: ccYToVal(y) };
         ccPoints(id).push(pt);
         sortCC(id);
       }
       drag = { mode: "cc-point", id, ccPt: pt, pre, changed: !hit };
-      applyCCDrag(x, y, e.altKey);
+      applyCCDrag(x, y, altActive(e));
       requestDraw();
     }
     function applyCCDrag(cx, cy, alt) {
@@ -2324,10 +2336,10 @@
       drag = {
         mode: "cc-draw", id, pre: snapState(), changed: false,
         line: e.shiftKey, mine: new Set(), lo: Infinity, hi: -Infinity,
-        startBeat: ccBeatAt(x, e.altKey), startVal: ccYToVal(y),
+        startBeat: ccBeatAt(x, altActive(e)), startVal: ccYToVal(y),
         lastX: null, lastVal: null,
       };
-      applyCCDraw(x, y, e.altKey);
+      applyCCDraw(x, y, altActive(e));
       requestDraw();
     }
     function applyCCDraw(cx, cy, alt) {
@@ -2619,7 +2631,7 @@
       const hit = noteAt(x, y);
       if (!hit || drag.cutKeys.has(hit.note._key)) return;
       // snapped to the grid by default; hold Option/Alt for freehand slicing
-      const beat = e.altKey ? xToBeat(x) : snapBeat(xToBeat(x));
+      const beat = altActive(e) ? xToBeat(x) : snapBeat(xToBeat(x));
       splitNote(hit.note, beat, drag);
     }
 
@@ -2677,12 +2689,12 @@
         return;
       }
       if (drag.mode === "cc-point") {
-        applyCCDrag(x, y, e.altKey);
+        applyCCDrag(x, y, altActive(e));
         requestDraw();
         return;
       }
       if (drag.mode === "cc-draw") {
-        applyCCDraw(x, y, e.altKey);
+        applyCCDraw(x, y, altActive(e));
         requestDraw();
         return;
       }
@@ -2748,7 +2760,7 @@
         } else {
           // FL-style: the placed note follows the cursor, snapped — no resize,
           // no velocity change on vertical movement. Option/Alt = off-grid follow.
-          let nb = e.altKey ? xToBeat(x) : snapBeat(xToBeat(x));
+          let nb = altActive(e) ? xToBeat(x) : snapBeat(xToBeat(x));
           nb = Math.max(0, Math.min(nb, clipDuration - n.duration));
           n.startTime = nb;
           n.pitch = Math.max(0, Math.min(127, yToPitch(y)));
@@ -2771,7 +2783,7 @@
         const ao = drag.origins.get(a._key);
         // snapped to the grid by default; hold Option/Alt for off-grid (freehand) move
         let nb;
-        if (e.altKey) {
+        if (altActive(e)) {
           nb = xToBeat(x) - drag.grabBeat;
         } else {
           // Snap by how many grid cells the POINTER has crossed since mousedown —
@@ -2807,12 +2819,16 @@
         return;
       }
       if (drag.mode === "resize") {
-        const minDur = snap > 0 ? snap : 0.02;
+        // Hold Option/Alt for off-grid (freehand) resize. When freehand, drop the
+        // minimum-length floor to a hair (not a whole grid cell) so fine edits land.
+        const alt = altActive(e);
+        const edgeBeat = px => alt ? xToBeat(px) : snapBeat(xToBeat(px));
+        const minDur = (!alt && snap > 0) ? snap : 0.02;
         if (drag.placed) {
           // double-click place: simple right-edge extend of the new note
           const n = drag.note;
           const before = n.duration;
-          let end = Math.max(n.startTime + minDur, snapBeat(xToBeat(x)));
+          let end = Math.max(n.startTime + minDur, edgeBeat(x));
           n.duration = Math.min(end, clipDuration) - n.startTime;
           if (n.duration !== before) drag.changed = true;
           requestDraw();
@@ -2826,11 +2842,11 @@
         let changed = false;
         let factor, aDur;
         if (drag.edge === "r") {
-          let end = Math.max(ao.startTime + minDur, snapBeat(xToBeat(x)));
+          let end = Math.max(ao.startTime + minDur, edgeBeat(x));
           aDur = Math.min(end, clipDuration) - ao.startTime;
         } else {
           const aEnd = ao.startTime + ao.duration;
-          let start = Math.max(0, Math.min(snapBeat(xToBeat(x)), aEnd - minDur));
+          let start = Math.max(0, Math.min(edgeBeat(x), aEnd - minDur));
           aDur = aEnd - start;
         }
         factor = aDur / ao.duration;
