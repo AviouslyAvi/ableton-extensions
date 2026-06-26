@@ -176,12 +176,28 @@
     body { font-size: 12px; }
 
     .toolbar {
-      gap: 0.3em; padding: 0.32em 0.55em; flex-wrap: wrap; row-gap: 0.3em;
+      gap: 0.3em; padding: 0.32em 0.55em;
+      /* Stay a single, fixed-height row at any window width. Narrow windows
+         scroll the bar horizontally instead of wrapping controls onto new
+         rows (which used to grow the bar's height and shuffle controls). */
+      flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden;
+      scrollbar-width: thin;
       background: linear-gradient(180deg,
         oklch(from var(--c-control-bg--500) calc(l * 1.06) c h),
         var(--c-bg--0500));
       box-shadow: inset 0 -1px 0 oklch(from var(--c-control-border) l c h / 0.7);
     }
+    /* Clusters keep their intrinsic width — never squeezed or wrapped. */
+    .toolbar .tgroup,
+    .toolbar > .alx-button,
+    .toolbar .clip-name { flex: 0 0 auto; }
+    /* Thin, unobtrusive horizontal scrollbar (WebKit). */
+    .toolbar::-webkit-scrollbar { height: 6px; }
+    .toolbar::-webkit-scrollbar-thumb {
+      background: oklch(from var(--c-control-border) calc(l * 1.6) c h);
+      border-radius: 3px;
+    }
+    .toolbar::-webkit-scrollbar-track { background: transparent; }
     /* grouped clusters of controls — tight, flat wells like Ableton's control bar */
     .tgroup {
       display: inline-flex; align-items: center; gap: 0.28em;
@@ -428,8 +444,8 @@
 
     <span class="spacer"></span>
 
-    <button class="alx-button small" id="dedupe-btn" title="Delete exact duplicate notes (same pitch, start AND length) stacked on top of each other. Keeps one. Overlaps are left alone — use Legato for those. Undoable.">Dedupe</button>
-    <button class="alx-button small" id="legato-btn" title="Legato: stretch or shorten every note so it ends exactly where the next note begins. Applies to all notes. Undoable.">Legato</button>
+    <button class="alx-button small" id="dedupe-btn" title="Delete exact duplicate notes (same pitch, start AND length) AND any shorter note that overlaps a longer note at the same pitch (covered or partially behind it). Keeps the longer note. Notes that only touch edges are left alone. Undoable.">Dedupe</button>
+    <button class="alx-button small" id="legato-btn" title="Legato: stretch or shorten notes so each ends exactly where the next note begins. Acts on the selected notes, or every note if none are selected. Undoable.">Legato</button>
     <button class="alx-button small" id="edit-map" title="Edit the articulation → keyswitch-pitch map.">Edit map…</button>
     <button class="alx-button small" id="help-btn" title="Keyboard shortcuts & how-to (press ? )">? Help</button>
     <button class="alx-button small icon-btn" id="settings-btn" title="Grid settings">
@@ -1283,6 +1299,17 @@
       requestDraw();
     }
 
+    // Re-sync the backing store to the element's LIVE box if they've drifted;
+    // returns true when it had to resize. Cheap (one getBoundingClientRect) and
+    // safe to call synchronously from input handlers, so a click always renders
+    // against the current box even on a host that starves rAF/ResizeObserver.
+    function syncCanvasSize() {
+      const box = canvas.getBoundingClientRect();
+      if (Math.abs(box.width - viewW) <= 0.5 && Math.abs(box.height - viewH) <= 0.5) return false;
+      resize();
+      return true;
+    }
+
     const gridW = () => Math.max(10, viewW - GUTTER);
     const gridH = () => Math.max(10, viewH - RULER - BOTTOM());
     const contentH = () => 128 * ROW_H;
@@ -1371,6 +1398,13 @@
     }
 
     function draw() {
+      // Keep the backing store matched to the element's LIVE box every frame.
+      // The box can change without a window-resize event (the embedded font
+      // finishing layout, the toolbar/key-chips wrapping) and not every host
+      // delivers ResizeObserver callbacks — a stale buffer then gets CSS-
+      // stretched to fit, so the grid renders scaled and clicks land offset
+      // (worse toward the right/bottom). Re-syncing here guarantees 1:1 drawing.
+      if (syncCanvasSize()) return;   // resize() reschedules the draw with synced dims
       ctx.clearRect(0, 0, viewW, viewH);
       drawGrid();
       drawLoopRegion();
@@ -2111,6 +2145,7 @@
     canvas.addEventListener("mouseleave", () => { if (hoverKey != null) { hoverKey = null; requestDraw(); } });
 
     canvas.addEventListener("mousedown", e => {
+      syncCanvasSize();   // if the box drifted since the last frame, fix the backing store now so this gesture renders 1:1
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left, y = e.clientY - rect.top;
       hideCtxMenu();
@@ -2147,6 +2182,9 @@
       if (!inGrid(x, y)) return;
       if (e.button === 2) return onRightDown(e, x, y);
       if (e.button !== 0) return;
+      // Cmd/Ctrl borrows the marquee/select tool from inside ANY tool — hold it
+      // to box-select or toggle notes without leaving cut/pencil/brush.
+      if (e.metaKey || e.ctrlKey) return onMouseToolDown(e, x, y);
       if (tool === "cut") return onCutDown(e, x, y);
       if (tool === "pencil") return onPencilDown(e, x, y);
       onMouseToolDown(e, x, y);
@@ -2566,9 +2604,7 @@
     }
 
     function onPencilDown(e, x, y) {
-      // Cmd/Ctrl+click in pencil mode = select/marquee (delegate to the mouse tool)
-      // instead of drawing a note.
-      if (e.metaKey || e.ctrlKey) return onMouseToolDown(e, x, y);
+      // (Cmd/Ctrl = marquee/select is handled at the dispatcher for every tool.)
       const hit = noteAt(x, y);
       if (hit) {
         const n = hit.note;
@@ -2631,6 +2667,17 @@
     }
 
     function onCutDown(e, x, y) {
+      // Grabbing a note edge resizes it (parity with the other tools — Option/Alt
+      // frees it from the grid, Shift makes a multi-selection take a uniform
+      // length). A body press still slices.
+      const hit = noteAt(x, y);
+      if (hit && (hit.zone === "resize-r" || hit.zone === "resize-l")) {
+        lastLength = hit.note.duration;
+        if (!selection.has(hit.note._key)) selection = new Set([hit.note._key]);
+        drag = startResizeDrag(hit.note, hit.zone === "resize-l" ? "l" : "r");
+        requestDraw();
+        return;
+      }
       drag = { mode: "cut", pre: snapState(), cutKeys: new Set(), didCut: false };
       cutAt(e, x, y);
       requestDraw();
@@ -2668,10 +2715,10 @@
         // hover feedback: resize cursor over either edge of a note, plus a glow
         // "lift" on the hovered note body so it's obvious what you'll grab.
         const hit = inGrid(x, y) ? noteAt(x, y) : null;
-        if (tool !== "cut") {
-          const overEdge = tool !== "brush" && hit && (hit.zone === "resize-l" || hit.zone === "resize-r");
-          canvas.style.cursor = overEdge ? "ew-resize" : toolCursor(tool);
-        }
+        // Edges are resizable in every tool, so show ew-resize over an edge
+        // regardless of which tool is active; bodies keep the tool's own cursor.
+        const overEdge = hit && (hit.zone === "resize-l" || hit.zone === "resize-r");
+        canvas.style.cursor = overEdge ? "ew-resize" : toolCursor(tool);
         const nk = hit && hit.zone === "body" ? hit.note._key : null;
         if (nk !== hoverKey) { hoverKey = nk; requestDraw(); }
         return;
@@ -3342,26 +3389,52 @@
     // optional hooks let the caller batch one undo step per drag gesture.
     function makeScrubbable(input, { min, max, onStart, onChange, onCommit } = {}) {
       if (!input) return;
-      let scrubbing = false, startY = 0, startVal = 0, moved = false;
+      // `dy` is the accumulated vertical drag (up = increase). In the Pointer
+      // Lock path it grows from relative movementY; in the fallback path it's
+      // recomputed each move as startY − clientY.
+      let scrubbing = false, startY = 0, startVal = 0, moved = false, dy = 0;
+
+      const applyDy = (shift) => {
+        if (Math.abs(dy) > 2 && !moved) { moved = true; onStart && onStart(); }
+        if (!moved) return;
+        const v = Math.max(min, Math.min(max, Math.round(startVal + dy * (shift ? 0.25 : 1))));
+        if (String(v) !== input.value) { input.value = String(v); onChange && onChange(v); }
+      };
+
+      // Ableton-style: while the pointer is locked the OS cursor is frozen in
+      // place, so the drag never runs into the bottom of the window — we just
+      // keep integrating relative motion. Only active once the lock engages.
+      const onLockMove = (e) => {
+        if (!scrubbing || document.pointerLockElement !== input) return;
+        dy += -(e.movementY || 0);
+        applyDy(e.shiftKey);
+      };
+
       input.addEventListener("pointerdown", (e) => {
         if (e.button !== 0) return;
-        scrubbing = true; moved = false;
+        scrubbing = true; moved = false; dy = 0;
         startY = e.clientY;
         startVal = readInt(input, parseInt(input.value, 10) || 0, min, max);
         try { input.setPointerCapture(e.pointerId); } catch (_) {}
+        // Request lock so the cursor stops moving. If the webview refuses it
+        // (or the promise rejects), the absolute-position fallback below kicks
+        // in instead — same feel, just bounded by the window edge.
+        try { const p = input.requestPointerLock && input.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (_) {}
+        document.addEventListener("mousemove", onLockMove);
         e.preventDefault();
       });
       input.addEventListener("pointermove", (e) => {
-        if (!scrubbing) return;
-        const dy = startY - e.clientY;
-        if (Math.abs(dy) > 2 && !moved) { moved = true; onStart && onStart(); }
-        if (!moved) return;
-        const v = Math.max(min, Math.min(max, Math.round(startVal + dy * (e.shiftKey ? 0.25 : 1))));
-        if (String(v) !== input.value) { input.value = String(v); onChange && onChange(v); }
+        // When locked, onLockMove drives the value from relative motion; the
+        // frozen clientY here would otherwise read as zero movement.
+        if (!scrubbing || document.pointerLockElement === input) return;
+        dy = startY - e.clientY;
+        applyDy(e.shiftKey);
       });
       const end = (e) => {
         if (!scrubbing) return;
         scrubbing = false;
+        document.removeEventListener("mousemove", onLockMove);
+        if (document.pointerLockElement === input) { try { document.exitPointerLock && document.exitPointerLock(); } catch (_) {} }
         try { input.releasePointerCapture(e.pointerId); } catch (_) {}
         if (moved) onCommit && onCommit();
         else { input.focus(); input.select(); }   // no drag → let them type
@@ -3484,16 +3557,32 @@
 
     document.getElementById("dedupe-btn").onclick = () => {
       const pre = snapState();
-      // Remove EXACT duplicate notes only: same pitch, same start AND same
-      // length. These stack perfectly on top of each other and retrigger the
-      // same note, at the same instant, for the same duration — so one is kept
-      // and the rest deleted. Notes that merely overlap (or share only a start)
-      // are left untouched; use Legato to make overlaps run into one another.
-      const seen = new Set();
       const toRemove = new Set();
+      // 1) EXACT duplicates: same pitch, same start AND same length. These stack
+      // perfectly and retrigger the same note at the same instant — keep one.
+      const seen = new Set();
       for (const n of notes) {
         const key = n.pitch + "@" + n.startTime.toFixed(6) + ":" + n.duration.toFixed(6);
         if (seen.has(key)) toRemove.add(n._key); else seen.add(key);
+      }
+      // 2) HIDDEN notes: a note that OVERLAPS a strictly longer note at the same
+      // pitch is masked behind it — the longer note already sounds that pitch
+      // across the overlap, so the shorter one is redundant. Delete the shorter,
+      // keep the longer. This catches both fully-covered notes and partial
+      // overlaps (the short note poking out past either edge). Notes that merely
+      // touch edges (one ends exactly where the next begins) are NOT overlapping
+      // and are left alone; equal-length overlaps are left for Legato too.
+      for (const b of notes) {
+        if (toRemove.has(b._key)) continue;
+        const bEnd = b.startTime + b.duration;
+        for (const a of notes) {
+          if (a === b || a.pitch !== b.pitch || a.duration <= b.duration || toRemove.has(a._key)) continue;
+          const aEnd = a.startTime + a.duration;
+          if (a.startTime < bEnd - EPS && b.startTime < aEnd - EPS) {   // true temporal overlap
+            toRemove.add(b._key);
+            break;
+          }
+        }
       }
       if (!toRemove.size) return;
       markDying([...toRemove]);
@@ -3505,12 +3594,17 @@
 
     document.getElementById("legato-btn").onclick = () => {
       const pre = snapState();
-      // Make every note reach exactly to the next note's start (nearest later
+      // Make each note reach exactly to the next note's start (nearest later
       // start on ANY pitch) — stretching short notes and shortening overlapping
-      // ones alike. The final note(s) (no later start) are left untouched.
-      const starts = [...new Set(notes.map(n => n.startTime))].sort((a, b) => a - b);
+      // ones alike. With a selection, the selected notes legato to EACH OTHER:
+      // both the notes changed and the start-boundaries come from the selection,
+      // so each selected note runs to the next SELECTED note and any unselected
+      // notes in between are skipped. With nothing selected, every note is used
+      // for both. Notes with no later start in the set are left untouched.
+      const targets = selection.size ? notes.filter(n => selection.has(n._key)) : notes;
+      const starts = [...new Set(targets.map(n => n.startTime))].sort((a, b) => a - b);
       let changed = false;
-      for (const n of notes) {
+      for (const n of targets) {
         const next = nextStartAfter(starts, n.startTime);
         if (next == null) continue;
         const d = next - n.startTime;
@@ -4037,6 +4131,18 @@
     })();
 
     window.addEventListener("resize", resize);
+    // The canvas re-syncs its backing store on window resize, but its box can
+    // also change WITHOUT one — the embedded font finishing layout on load, or
+    // the toolbar / key-chips wrapping at certain widths. A stale backing store
+    // gets CSS-stretched to fit while clicks map to the live box, so hits land
+    // offset (worse toward the right/bottom). Observe the element directly so
+    // resize() runs on ANY box change and the cursor stays in lockstep with the
+    // grid. Loop-safe: resize() only sets the width/height ATTRIBUTES (backing
+    // store); the layout box is governed by CSS width/height:100%, so it never
+    // feeds back into the observer.
+    if (typeof ResizeObserver !== "undefined") {
+      try { new ResizeObserver(() => resize()).observe(canvas); } catch (_) {}
+    }
     init();
   </script>
 </body>
