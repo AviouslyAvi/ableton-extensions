@@ -428,7 +428,8 @@
 
     <span class="spacer"></span>
 
-    <button class="alx-button small" id="dedupe-btn" title="Remove overlapping duplicate notes on the same pitch. Undoable.">Dedupe</button>
+    <button class="alx-button small" id="dedupe-btn" title="Delete exact duplicate notes (same pitch, start AND length) stacked on top of each other. Keeps one. Overlaps are left alone — use Legato for those. Undoable.">Dedupe</button>
+    <button class="alx-button small" id="legato-btn" title="Legato: stretch or shorten every note so it ends exactly where the next note begins. Applies to all notes. Undoable.">Legato</button>
     <button class="alx-button small" id="edit-map" title="Edit the articulation → keyswitch-pitch map.">Edit map…</button>
     <button class="alx-button small" id="help-btn" title="Keyboard shortcuts & how-to (press ? )">? Help</button>
     <button class="alx-button small icon-btn" id="settings-btn" title="Grid settings">
@@ -1856,6 +1857,8 @@
 
     // ---- Hit testing ----
     function noteAt(x, y) {
+      let firstHit = null;   // topmost note under the cursor (original behavior)
+      let rHit = null;       // any note whose RIGHT edge is under the cursor
       for (let i = notes.length - 1; i >= 0; i--) {
         const n = notes[i];
         const nx = beatToX(n.startTime), nw = Math.max(2, n.duration * pxPerBeat), ny = pitchTopY(n.pitch);
@@ -1865,10 +1868,16 @@
             if (x >= nx + nw - EDGE) zone = "resize-r";
             else if (x <= nx + EDGE) zone = "resize-l";
           }
-          return { note: n, zone };
+          if (zone === "resize-r" && !rHit) rHit = { note: n, zone };
+          if (!firstHit) firstHit = { note: n, zone };
         }
       }
-      return null;
+      // When the topmost hit is a LEFT-edge resize but another note's RIGHT edge
+      // sits at the same point (notes that touch — e.g. after Legato), prefer the
+      // right-edge resize so dragging that boundary EXTENDS the left note instead
+      // of moving the right note's start. Otherwise keep the original topmost hit.
+      if (firstHit && firstHit.zone === "resize-l" && rHit) return rHit;
+      return firstHit;
     }
     function spanAt(beat) {
       for (const s of laneSpans()) {
@@ -2834,13 +2843,14 @@
           requestDraw();
           return;
         }
-        // Multi-note edge resize. The anchor edge follows the (snapped)
-        // cursor; the others scale RELATIVE to their own length — or, while
-        // Shift is held, take the anchor's absolute length.
+        // Multi-note edge resize. The anchor edge follows the (snapped) cursor;
+        // every other selected note changes by the SAME absolute amount as the
+        // anchor (its edge moves by the same delta) — or, while Shift is held,
+        // all take the anchor's absolute length.
         const a = drag.anchor, ao = drag.origins.get(a._key);
         const uniform = e.shiftKey;
         let changed = false;
-        let factor, aDur;
+        let aDur;
         if (drag.edge === "r") {
           let end = Math.max(ao.startTime + minDur, edgeBeat(x));
           aDur = Math.min(end, clipDuration) - ao.startTime;
@@ -2849,11 +2859,11 @@
           let start = Math.max(0, Math.min(edgeBeat(x), aEnd - minDur));
           aDur = aEnd - start;
         }
-        factor = aDur / ao.duration;
+        const dDelta = aDur - ao.duration;   // absolute length change applied to all
         for (const [k, o] of drag.origins) {
           const n = notes.find(q => q._key === k);
           if (!n) continue;
-          let d = uniform ? aDur : o.duration * factor;
+          let d = uniform ? aDur : o.duration + dDelta;
           if (drag.edge === "r") {
             d = Math.max(minDur, Math.min(d, clipDuration - o.startTime));
             if (n.duration !== d) changed = true;
@@ -3462,30 +3472,51 @@
     helpOverlay.addEventListener("click", e => { if (e.target === helpOverlay) closeHelp(); });
 
     // ---- Map editor ----
+    const EPS = 1e-6;
+    // Distinct note start times in ascending order. Both Dedupe and Legato align
+    // note ends to "the next note's start" — i.e. the smallest start strictly
+    // greater than a given beat. Computed once per click over the live notes.
+    const nextStartAfter = (starts, t) => {
+      // starts is ascending; return the first value > t (+EPS), else null
+      for (let i = 0; i < starts.length; i++) if (starts[i] > t + EPS) return starts[i];
+      return null;
+    };
+
     document.getElementById("dedupe-btn").onclick = () => {
       const pre = snapState();
-      // Group by pitch, sorted by startTime; remove any note that starts before the previous one ends.
-      const byPitch = {};
-      for (const n of notes) {
-        if (!byPitch[n.pitch]) byPitch[n.pitch] = [];
-        byPitch[n.pitch].push(n);
-      }
+      // Remove EXACT duplicate notes only: same pitch, same start AND same
+      // length. These stack perfectly on top of each other and retrigger the
+      // same note, at the same instant, for the same duration — so one is kept
+      // and the rest deleted. Notes that merely overlap (or share only a start)
+      // are left untouched; use Legato to make overlaps run into one another.
+      const seen = new Set();
       const toRemove = new Set();
-      for (const row of Object.values(byPitch)) {
-        row.sort((a, b) => a.startTime - b.startTime);
-        let prevEnd = -Infinity;
-        for (const n of row) {
-          if (n.startTime < prevEnd - 1e-6) {
-            toRemove.add(n._key);
-          } else {
-            prevEnd = n.startTime + n.duration;
-          }
-        }
+      for (const n of notes) {
+        const key = n.pitch + "@" + n.startTime.toFixed(6) + ":" + n.duration.toFixed(6);
+        if (seen.has(key)) toRemove.add(n._key); else seen.add(key);
       }
       if (!toRemove.size) return;
       markDying([...toRemove]);
       notes = notes.filter(n => !toRemove.has(n._key));
       selection = new Set([...selection].filter(k => !toRemove.has(k)));
+      pushUndoState(pre);
+      requestDraw();
+    };
+
+    document.getElementById("legato-btn").onclick = () => {
+      const pre = snapState();
+      // Make every note reach exactly to the next note's start (nearest later
+      // start on ANY pitch) — stretching short notes and shortening overlapping
+      // ones alike. The final note(s) (no later start) are left untouched.
+      const starts = [...new Set(notes.map(n => n.startTime))].sort((a, b) => a - b);
+      let changed = false;
+      for (const n of notes) {
+        const next = nextStartAfter(starts, n.startTime);
+        if (next == null) continue;
+        const d = next - n.startTime;
+        if (Math.abs(n.duration - d) > EPS) { n.duration = d; changed = true; }
+      }
+      if (!changed) return;
       pushUndoState(pre);
       requestDraw();
     };
