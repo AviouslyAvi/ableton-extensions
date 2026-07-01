@@ -2,8 +2,13 @@
 <index version="1" name="Articulation Roll (REAPER)">
   <category name="MIDI Editor/Articulation Roll">
     <reapack name="Articulation Roll" type="script" desc="Articulation Roll — keyswitch articulation manager (port of the Ableton extension)">
-      <version name="1.1" author="AviouslyAvi" time="2026-07-01T00:00:00Z">
-        <changelog><![CDATA[1.1 — add the ReaImGui app (dockable banks/articulations panel).
+      <version name="1.2" author="AviouslyAvi" time="2026-07-01T00:00:00Z">
+        <changelog><![CDATA[1.2 — channel-based articulations (note coloring + bug fix).
+- Each articulation owns a MIDI channel; assigning retags the notes' channel so
+  they recolor (set the MIDI editor note-color dropdown to "Channel").
+- Fixes lingering keyswitch notes when changing articulations on stacked notes.
+- App: color-coded buttons, per-articulation channel + color swatch in Edit.
+1.1 — add the ReaImGui app (dockable banks/articulations panel).
 - ArticulationRoll_App.lua: pick a bank, click to apply, edit names/pitches inline.
 - Multi-bank config (ArticulationRoll_banks.lua), edited entirely in the panel.
 1.0 — Initial ReaPack release.
