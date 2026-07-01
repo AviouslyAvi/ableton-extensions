@@ -2,8 +2,13 @@
 <index version="1" name="Articulation Roll (REAPER)">
   <category name="MIDI Editor/Articulation Roll">
     <reapack name="Articulation Roll" type="script" desc="Articulation Roll — keyswitch articulation manager (port of the Ableton extension)">
-      <version name="1.2" author="AviouslyAvi" time="2026-07-01T00:00:00Z">
-        <changelog><![CDATA[1.2 — channel-based articulations (note coloring + bug fix).
+      <version name="1.3" author="AviouslyAvi" time="2026-07-01T00:00:00Z">
+        <changelog><![CDATA[1.3 — Ableton feature parity in the app.
+- Auto-pitch: cascade keyswitch notes upward from the first articulation.
+- Dedupe + Legato note actions (ported 1:1 from the Ableton version), undoable.
+- Edit mode: multi-row select (click color chip, shift-click ranges), Select all,
+  Delete selected, and a keyswitch keyboard visualiser.
+1.2 — channel-based articulations (note coloring + bug fix).
 - Each articulation owns a MIDI channel; assigning retags the notes' channel so
   they recolor (set the MIDI editor note-color dropdown to "Channel").
 - Fixes lingering keyswitch notes when changing articulations on stacked notes.

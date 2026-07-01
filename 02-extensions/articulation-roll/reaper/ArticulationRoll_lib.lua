@@ -289,6 +289,115 @@ function M.applyArticulation(take, articulations, action, onlySelected)
   return #newKs, retagged
 end
 
+-- Dedupe: delete exact-duplicate melodic notes (same pitch, start AND end) and
+-- any shorter note that truly overlaps a strictly longer note at the same pitch
+-- (covered or partially behind it — notes that only touch edges are left alone).
+-- Then regenerate keyswitches. One undo step. Ported from roll.html "Dedupe".
+-- Returns #notesRemoved.
+function M.dedupe(take, articulations)
+  local all = readNotes(take)
+  local melodic, ksPitch = splitNotes(all, articulations)
+
+  local toRemove = {}   -- set keyed by note idx
+  local seen = {}
+  for _, n in ipairs(melodic) do
+    local key = string.format("%d@%d:%d", n.pitch, n.startppq, n.endppq)
+    if seen[key] then toRemove[n.idx] = true else seen[key] = true end
+  end
+  for _, b in ipairs(melodic) do
+    if not toRemove[b.idx] then
+      local bDur = b.endppq - b.startppq
+      for _, a in ipairs(melodic) do
+        if a ~= b and a.pitch == b.pitch and (a.endppq - a.startppq) > bDur
+           and not toRemove[a.idx] then
+          if a.startppq < b.endppq and b.startppq < a.endppq then  -- true overlap
+            toRemove[b.idx] = true
+            break
+          end
+        end
+      end
+    end
+  end
+
+  local removed = 0
+  local kept = {}
+  for _, n in ipairs(melodic) do
+    if toRemove[n.idx] then removed = removed + 1 else kept[#kept + 1] = n end
+  end
+  if removed == 0 then return 0 end
+
+  local newKs = keyswitchesFromNotes(kept, articulations, clipEndPPQ(take), ppqPerBeat(take))
+
+  reaper.Undo_BeginBlock()
+  for i = #all, 1, -1 do
+    local n = all[i]
+    if ksPitch[n.pitch] or toRemove[n.idx] then reaper.MIDI_DeleteNote(take, n.idx) end
+  end
+  for _, k in ipairs(newKs) do
+    reaper.MIDI_InsertNote(take, false, false, k.startppq, k.endppq,
+      k.channel, k.pitch, k.velocity, true)
+  end
+  reaper.MIDI_Sort(take)
+  reaper.Undo_EndBlock("ArticulationRoll: dedupe", -1)
+  return removed
+end
+
+-- Legato: stretch/shorten each note so it ends exactly where the next note
+-- begins (nearest later start on ANY pitch). Acts on the SELECTED melodic notes
+-- if any are selected, otherwise on every melodic note; in the selected case the
+-- start-boundaries also come from the selection. Then regenerate keyswitches.
+-- One undo step. Ported from roll.html "Legato". Returns #notesChanged.
+function M.legato(take, articulations)
+  local all = readNotes(take)
+  local melodic, ksPitch = splitNotes(all, articulations)
+
+  local anySel = false
+  for _, n in ipairs(melodic) do if n.sel then anySel = true; break end end
+  local targets = {}
+  for _, n in ipairs(melodic) do
+    if (not anySel) or n.sel then targets[#targets + 1] = n end
+  end
+  if #targets == 0 then return 0 end
+
+  local startSet = {}
+  for _, n in ipairs(targets) do startSet[n.startppq] = true end
+  local starts = {}
+  for s in pairs(startSet) do starts[#starts + 1] = s end
+  table.sort(starts)
+  local EPS = 0.5   -- half a tick
+  local function nextStartAfter(t)
+    for _, s in ipairs(starts) do if s > t + EPS then return s end end
+    return nil
+  end
+
+  local changed = 0
+  reaper.Undo_BeginBlock()
+  for _, n in ipairs(targets) do
+    local nx = nextStartAfter(n.startppq)
+    if nx and math.abs(n.endppq - nx) > EPS then
+      reaper.MIDI_SetNote(take, n.idx, nil, nil, nil, nx, nil, nil, nil, true)
+      n.endppq = nx
+      changed = changed + 1
+    end
+  end
+  if changed == 0 then
+    reaper.Undo_EndBlock("ArticulationRoll: legato", -1)
+    return 0
+  end
+
+  local newKs = keyswitchesFromNotes(melodic, articulations, clipEndPPQ(take), ppqPerBeat(take))
+  for i = #all, 1, -1 do
+    if ksPitch[all[i].pitch] then reaper.MIDI_DeleteNote(take, all[i].idx) end
+  end
+  for _, k in ipairs(newKs) do
+    reaper.MIDI_InsertNote(take, false, false, k.startppq, k.endppq,
+      k.channel, k.pitch, k.velocity, true)
+  end
+  reaper.MIDI_Sort(take)
+  reaper.Undo_EndBlock("ArticulationRoll: legato", -1)
+  return changed
+end
+
 -- The articulation currently on the selected melodic notes, by channel. Returns
 -- the name if all selected notes share one articulation, "" if they're all
 -- unassigned, or nil if they differ / nothing is selected. Drives button

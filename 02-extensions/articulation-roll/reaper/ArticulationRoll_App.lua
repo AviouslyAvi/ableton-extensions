@@ -84,6 +84,8 @@ local cfg      = ART.loadBanks()
 local bankIdx  = 1
 local editMode = false
 local dirty    = false
+local mapSel   = {}    -- edit-mode row selection: set keyed by articulation index
+local mapAnchor = nil  -- last-clicked row, for shift-range selection
 local ctx      = ImGui.CreateContext('ArticulationRoll')
 
 local function curBank() return cfg.banks[bankIdx] end
@@ -137,8 +139,123 @@ local function drawPlayMode(take)
   ImGui.TextDisabled(ctx, current == nil and "(select notes)"
     or (current == "" and "unassigned" or ("current: " .. current)))
 
+  if ImGui.Button(ctx, "Dedupe", 90, 0) then
+    if take then ART.dedupe(take, bank.articulations) end
+  end
+  if ImGui.IsItemHovered(ctx) then
+    ImGui.SetTooltip(ctx, "Delete exact-duplicate notes (same pitch, start AND length) and any\n" ..
+      "shorter note hidden behind a longer one at the same pitch. Undoable.")
+  end
+  ImGui.SameLine(ctx)
+  if ImGui.Button(ctx, "Legato", 90, 0) then
+    if take then ART.legato(take, bank.articulations) end
+  end
+  if ImGui.IsItemHovered(ctx) then
+    ImGui.SetTooltip(ctx, "Stretch/shorten each note to end exactly where the next begins.\n" ..
+      "Acts on the selected notes, or every note if none are selected. Undoable.")
+  end
+
   ImGui.Spacing(ctx)
   ImGui.TextDisabled(ctx, "Tip: MIDI editor note-color dropdown -> \"Channel\" to see colors.")
+end
+
+------------------------------------------------------------------- ks keyboard --
+-- A little piano keyboard (MIDI 0-36, C-1..C2 with default offset) showing where
+-- each articulation's keyswitch note sits, colored by channel, with a numbered
+-- pin per row. Hover shows the pitch; clicking a highlighted key selects that
+-- row. Mirrors roll.html's "Keyswitch positions" visualiser.
+local function isBlackKey(p) local m = p % 12; return m == 1 or m == 3 or m == 6 or m == 8 or m == 10 end
+
+local function drawKsKeyboard(bank)
+  local MINP, MAXP = 0, 36
+  local WW, BW = 22, 13
+  local WH, BH = 74, 46
+
+  local wkX, wTotal = {}, 0
+  for p = MINP, MAXP do
+    if not isBlackKey(p) then wkX[p] = wTotal; wTotal = wTotal + WW end
+  end
+
+  local pitchArt = {}   -- pitch -> articulation index (last wins on collision)
+  for i, a in ipairs(bank.articulations) do
+    if a.pitch >= MINP and a.pitch <= MAXP then pitchArt[a.pitch] = i end
+  end
+
+  local dl = ImGui.GetWindowDrawList(ctx)
+  local ox, oy = ImGui.GetCursorScreenPos(ctx)
+  local clicked = ImGui.InvisibleButton(ctx, "##kskbd", wTotal, WH)
+  local hovered = ImGui.IsItemHovered(ctx)
+  local mx, my = ImGui.GetMousePos(ctx)
+
+  local function blackX(p)
+    local q = p - 1
+    while q >= MINP and isBlackKey(q) do q = q - 1 end
+    if q >= MINP then return ox + wkX[q] + WW - BW / 2 else return ox end
+  end
+
+  -- White keys
+  for p = MINP, MAXP do
+    if not isBlackKey(p) then
+      local x = ox + wkX[p]
+      local ai = pitchArt[p]
+      local col = ai and rgba(bank.articulations[ai].channel, 0xFF) or 0xD2D2D2FF
+      ImGui.DrawList_AddRectFilled(dl, x + 0.5, oy + 0.5, x + WW - 0.5, oy + WH - 0.5, col, 2)
+      ImGui.DrawList_AddRect(dl, x + 0.5, oy + 0.5, x + WW - 0.5, oy + WH - 0.5, 0x000000AA, 2)
+      if p % 12 == 0 and not ai then
+        ImGui.DrawList_AddText(dl, x + 2, oy + WH - 16, 0x777777FF, noteName(p))
+      end
+    end
+  end
+  -- Black keys
+  for p = MINP, MAXP do
+    if isBlackKey(p) then
+      local bx = blackX(p)
+      local ai = pitchArt[p]
+      local col = ai and rgba(bank.articulations[ai].channel, 0xFF) or 0x1A1A1AFF
+      ImGui.DrawList_AddRectFilled(dl, bx, oy, bx + BW, oy + BH, col, 2)
+      ImGui.DrawList_AddRect(dl, bx, oy, bx + BW, oy + BH, 0x000000CC, 2)
+    end
+  end
+  -- Numbered pins on highlighted keys
+  for i, a in ipairs(bank.articulations) do
+    local p = a.pitch
+    if p >= MINP and p <= MAXP then
+      local blk = isBlackKey(p)
+      local kx  = blk and (blackX(p) + BW / 2) or (ox + wkX[p] + WW / 2)
+      local ky  = blk and (oy + 14) or (oy + WH - 14)
+      local r   = blk and 8 or 9
+      ImGui.DrawList_AddCircleFilled(dl, kx, ky, r, 0xF2F2F2F0)
+      ImGui.DrawList_AddCircle(dl, kx, ky, r, rgba(a.channel, 0xFF), 0, 2)
+      local lbl = tostring(i)
+      local tw  = ImGui.CalcTextSize(ctx, lbl)
+      ImGui.DrawList_AddText(dl, kx - tw / 2, ky - 7, 0x000000E6, lbl)
+    end
+  end
+
+  -- Hover tooltip + click-to-select (black keys sit on top, so test them first)
+  if hovered then
+    local hit = nil
+    for p = MAXP, MINP, -1 do
+      if isBlackKey(p) then
+        local bx = blackX(p)
+        if mx >= bx and mx <= bx + BW and my <= oy + BH then hit = p; break end
+      end
+    end
+    if hit == nil then
+      for p = MAXP, MINP, -1 do
+        if not isBlackKey(p) then
+          local x = ox + wkX[p]
+          if mx >= x and mx <= x + WW then hit = p; break end
+        end
+      end
+    end
+    if hit ~= nil then
+      local ai = pitchArt[hit]
+      ImGui.SetTooltip(ctx, string.format("%s  (MIDI %d)%s", noteName(hit), hit,
+        ai and ("  -> " .. bank.articulations[ai].name) or ""))
+      if clicked and ai then mapSel = { [ai] = true }; mapAnchor = ai end
+    end
+  end
 end
 
 ------------------------------------------------------------------- edit mode --
@@ -149,6 +266,23 @@ local function drawEditMode()
   ImGui.SetNextItemWidth(ctx, 260)
   local chg, name = ImGui.InputText(ctx, "##bankname", bank.name)
   if chg then bank.name = name; dirty = true end
+  ImGui.Spacing(ctx)
+
+  -- Selection toolbar (click a row's color swatch to select; shift-click ranges).
+  local nsel = 0; for _ in pairs(mapSel) do nsel = nsel + 1 end
+  if ImGui.Button(ctx, "Select all") then
+    mapSel = {}; for i = 1, #bank.articulations do mapSel[i] = true end
+    mapAnchor = nil
+  end
+  ImGui.SameLine(ctx)
+  local doDeleteSel = false
+  if nsel > 0 then
+    if ImGui.Button(ctx, "Delete selected") then doDeleteSel = true end
+    ImGui.SameLine(ctx)
+    ImGui.TextDisabled(ctx, nsel .. " selected")
+  else
+    ImGui.TextDisabled(ctx, "Click a row's color chip to select (shift-click for a range).")
+  end
   ImGui.Spacing(ctx)
 
   local flags = ImGui.TableFlags_Borders | ImGui.TableFlags_RowBg | ImGui.TableFlags_SizingStretchProp
@@ -164,10 +298,22 @@ local function drawEditMode()
     local removeIdx = nil
     for i, a in ipairs(bank.articulations) do
       ImGui.TableNextRow(ctx)
+      if mapSel[i] then
+        ImGui.TableSetBgColor(ctx, ImGui.TableBgTarget_RowBg0, 0x3A6EA566)
+      end
 
       ImGui.TableSetColumnIndex(ctx, 0)
-      ImGui.ColorButton(ctx, "##c" .. i, rgba(a.channel, 0xFF),
-        ImGui.ColorEditFlags_NoTooltip | ImGui.ColorEditFlags_NoDragDrop, 16, 16)
+      if ImGui.ColorButton(ctx, "##c" .. i, rgba(a.channel, 0xFF),
+        ImGui.ColorEditFlags_NoTooltip | ImGui.ColorEditFlags_NoDragDrop, 16, 16) then
+        local shift = (ImGui.GetKeyMods(ctx) & ImGui.Mod_Shift) ~= 0
+        if shift and mapAnchor then
+          local lo, hi = math.min(mapAnchor, i), math.max(mapAnchor, i)
+          for k = lo, hi do mapSel[k] = true end
+        else
+          if mapSel[i] then mapSel[i] = nil else mapSel[i] = true end
+          mapAnchor = i
+        end
+      end
 
       ImGui.TableSetColumnIndex(ctx, 1)
       ImGui.SetNextItemWidth(ctx, -1)
@@ -200,7 +346,15 @@ local function drawEditMode()
       if ImGui.Button(ctx, "x##rm" .. i) then removeIdx = i end
     end
     ImGui.EndTable(ctx)
-    if removeIdx then table.remove(bank.articulations, removeIdx); dirty = true end
+    if removeIdx then table.remove(bank.articulations, removeIdx); mapSel = {}; mapAnchor = nil; dirty = true end
+  end
+
+  -- Delete selected rows (high index first so positions stay valid).
+  if doDeleteSel then
+    local idxs = {}; for k in pairs(mapSel) do idxs[#idxs + 1] = k end
+    table.sort(idxs, function(x, y) return x > y end)
+    for _, k in ipairs(idxs) do table.remove(bank.articulations, k) end
+    mapSel = {}; mapAnchor = nil; dirty = true
   end
 
   ImGui.Spacing(ctx)
@@ -216,7 +370,25 @@ local function drawEditMode()
     dirty = true
   end
   ImGui.SameLine(ctx)
+  if ImGui.Button(ctx, "Auto-pitch") then
+    if #bank.articulations > 0 then
+      local base = bank.articulations[1].pitch or 0
+      for i, a in ipairs(bank.articulations) do a.pitch = math.min(127, base + (i - 1)) end
+      dirty = true
+    end
+  end
+  if ImGui.IsItemHovered(ctx) then
+    ImGui.SetTooltip(ctx, "Cascade keyswitch notes upward from the first: each row's pitch\n" ..
+      "becomes (first row's pitch + its position). Sequential from the top.")
+  end
+  ImGui.SameLine(ctx)
   ImGui.TextDisabled(ctx, "Chan colors the notes (channel 1 = unassigned).")
+
+  -- Keyswitch keyboard visualiser.
+  ImGui.Spacing(ctx); ImGui.Separator(ctx)
+  ImGui.TextDisabled(ctx, "Keyswitch positions  (hover for pitch · click a highlighted key to select its row)")
+  ImGui.Spacing(ctx)
+  drawKsKeyboard(bank)
 end
 
 ------------------------------------------------------------------- top bar --

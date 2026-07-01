@@ -50,12 +50,22 @@ the keyswitch note is what actually selects the articulation.
 - **Clear** — send the selected notes back to the unassigned channel (channel 1),
   removing their articulation. **Rebuild** — regenerate keyswitches after you move
   or resize notes.
+- **Dedupe** — delete exact-duplicate notes (same pitch, start AND length) and any
+  shorter note hidden behind a longer one at the same pitch. **Legato** — stretch
+  or shorten each note to end exactly where the next begins (acts on the selected
+  notes, or every note if none are selected). Both are single, undoable steps and
+  regenerate keyswitches afterward — ported 1:1 from the Ableton version.
 - **Edit** checkbox — rename the bank and, per articulation: name, **KS note**
   (the keyswitch note, typed as a name like `C4`/`F#3`/`Db2` or a bare MIDI number,
   matching REAPER's octave display), velocity, **Chan** (its color/channel, 1–16; channel 1 is
   reserved for "unassigned"), and **Hold** (latch vs short trigger). The color
-  swatch on each row shows the channel color. **+ Bank / – Bank** manage multiple
-  instrument banks. Edits auto-save to `ArticulationRoll_banks.lua`.
+  swatch on each row shows the channel color — **click it to select the row**
+  (shift-click for a range), then **Delete selected** or **Select all** for bulk
+  edits. **Auto-pitch** cascades keyswitch notes upward from the first row (each
+  pitch becomes *first row's pitch + its position*). A **keyswitch keyboard** below
+  the table shows where each articulation sits — hover for the pitch, click a
+  highlighted key to select its row. **+ Bank / – Bank** manage multiple instrument
+  banks. Edits auto-save to `ArticulationRoll_banks.lua`.
 
 That's the whole setup: install ReaImGui once, load one script. Banks, names,
 pitches, and channels are all editable in the panel — no text files to hand-edit.
@@ -184,7 +194,9 @@ Kontakt, etc.) right in the panel.
 
 ## Not ported
 
-The Ableton webview extras — in-editor audible preview, the Randomize/Ramp lane
-footer, marquee/resize gestures, snap-to-scale — are all UI features of the
-custom roll. In Reaper you get those from the native MIDI editor instead. This
-script is purely the articulation ↔ keyswitch engine.
+The Ableton webview extras that are inseparable from its custom canvas — in-editor
+audible preview, the Randomize/Ramp lane footer, marquee/resize gestures,
+snap-to-scale, themes, per-note color presets — stay in the Ableton version; in
+Reaper you get note editing from the native MIDI editor instead. The portable
+articulation-map tools (Dedupe, Legato, Auto-pitch, multi-select, the keyswitch
+keyboard) have all been brought across into the app.
