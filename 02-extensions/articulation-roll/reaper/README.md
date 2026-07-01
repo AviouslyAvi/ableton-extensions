@@ -5,6 +5,48 @@ different host: it tags melodic notes with an articulation and synthesizes the
 matching **keyswitch notes** into the take — the Reaticulate-style workflow, but
 built on the exact articulation logic from the Ableton version.
 
+There are two ways to use it, sharing one engine (`ArticulationRoll_lib.lua`):
+
+1. **The app** (`ArticulationRoll_App.lua`) — a dockable panel: pick a bank, click
+   an articulation to apply it to the selected notes, edit bank/articulation names
+   and keyswitch pitches inline. Closest to the Ableton experience. **Start here.**
+2. **Key-bind scripts** — no-UI actions you bind to keys (`1`–`8` = assign, etc.),
+   for fast keyboard workflows. Optional.
+
+## The app (recommended)
+
+### One-time setup
+
+The app needs the **ReaImGui** extension (for the window). Install it once:
+
+- REAPER → **Extensions → ReaPack → Browse packages** → search **`ReaImGui`** →
+  right-click **"ReaImGui: ReaScript binding for Dear ImGui" → Install** → **Apply**
+  → restart REAPER.
+
+Then load the app as an action:
+
+- **Actions → Show action list → New action → Load ReaScript…** →
+  `Scripts/ArticulationRoll/ArticulationRoll_App.lua`. Bind it to a key/toolbar if
+  you like, or just run it from the action list. Dock the window wherever you want.
+
+### Using it
+
+- **Bank dropdown** — choose the articulation set for the instrument on the track.
+- **Articulation buttons** — select notes in the MIDI editor, click a button to
+  apply that articulation (the button highlights when the selection already carries
+  it). **Clear** removes it; **Rebuild** re-derives everything after you move notes.
+- **Edit** checkbox — rename the bank, set its keyswitch MIDI channel, and add /
+  rename / re-pitch / remove articulations (name, pitch, velocity, hold). **+ Bank /
+  – Bank** manage multiple instrument banks. Edits auto-save to
+  `ArticulationRoll_banks.lua` in the resource path.
+
+That's the whole setup: install ReaImGui once, load one script. Banks and names are
+all editable in the panel — no text files to hand-edit.
+
+---
+
+## Key-bind scripts (optional, no ReaImGui needed)
+
 ## Why it's a port, not an import
 
 The Ableton extension is a `.ablx` package that runs in Live's Node-based
@@ -35,6 +77,7 @@ Keep all of these in the **same folder** — the action scripts load
 | File | What it is |
 |---|---|
 | `ArticulationRoll_lib.lua` | Shared engine. Never bound directly. |
+| `ArticulationRoll_App.lua` | The dockable ReaImGui panel (banks + articulations). |
 | `ArticulationRoll_Menu.lua` | Pop-up menu (assign / clear / rebuild / edit map). |
 | `ArticulationRoll_Assign_Slot1.lua` … `Slot8.lua` | Assign the **Nth** articulation in the map to selected notes. |
 | `ArticulationRoll_Clear.lua` | Clear articulation from selected notes. |

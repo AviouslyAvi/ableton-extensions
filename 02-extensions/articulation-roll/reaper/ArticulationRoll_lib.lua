@@ -98,6 +98,62 @@ function M.openMapFile()
 end
 
 --------------------------------------------------------------------------------
+-- Bank config (multi-bank; used by the ReaImGui app). Stored as a Lua table so
+-- we can load it with load() and serialize it by hand — no JSON dependency.
+--   { version = 1, banks = { { name, channel, articulations = { {name,pitch,velocity,hold}, ... } }, ... } }
+--------------------------------------------------------------------------------
+local BANKS_FILENAME = "ArticulationRoll_banks.lua"
+
+local function banksPath() return reaper.GetResourcePath() .. "/" .. BANKS_FILENAME end
+M.banksPath = banksPath
+
+function M.defaultBanks()
+  local arts = {}
+  for _, a in ipairs(DEFAULT_MAP) do
+    arts[#arts + 1] = { name = a.name, pitch = a.pitch, velocity = a.velocity, hold = a.hold }
+  end
+  return { version = 1, banks = { { name = "Default", channel = 0, articulations = arts } } }
+end
+
+function M.loadBanks()
+  local f = io.open(banksPath(), "r")
+  if not f then
+    local d = M.defaultBanks()
+    M.saveBanks(d)
+    return d
+  end
+  local src = f:read("*a"); f:close()
+  local chunk = load(src, "banks", "t", {})   -- sandboxed: no env, data only
+  local ok, data = pcall(chunk)
+  if not ok or type(data) ~= "table" or type(data.banks) ~= "table" or #data.banks == 0 then
+    return M.defaultBanks()
+  end
+  return data
+end
+
+-- Serialize a bank config table back to a Lua source file.
+local function q(s) return '"' .. tostring(s):gsub('\\', '\\\\'):gsub('"', '\\"') .. '"' end
+
+function M.saveBanks(data)
+  local f = io.open(banksPath(), "w")
+  if not f then return false end
+  f:write("-- ArticulationRoll banks — edited by the ArticulationRoll app.\n")
+  f:write("return {\n  version = 1,\n  banks = {\n")
+  for _, b in ipairs(data.banks) do
+    f:write(string.format("    { name = %s, channel = %d, articulations = {\n",
+      q(b.name), tonumber(b.channel) or 0))
+    for _, a in ipairs(b.articulations) do
+      f:write(string.format("      { name = %s, pitch = %d, velocity = %d, hold = %s },\n",
+        q(a.name), tonumber(a.pitch) or 0, tonumber(a.velocity) or 100, tostring(a.hold == true)))
+    end
+    f:write("    }},\n")
+  end
+  f:write("  },\n}\n")
+  f:close()
+  return true
+end
+
+--------------------------------------------------------------------------------
 -- Ported core #1: articulationForMelodic  (was artForMelodicNotes)
 --------------------------------------------------------------------------------
 local function articulationForMelodic(melodic, keyswitches)
@@ -207,11 +263,13 @@ local function clipEndPPQ(take)
   return reaper.MIDI_GetPPQPosFromProjTime(take, pos + len)
 end
 
--- Derive articulations from existing keyswitches, override the selected melodic
--- notes with `newArt` (nil = clear; false = leave arts as derived), then rewrite
--- ALL keyswitch notes. Melodic notes are never touched.
-function M.rebuild(take, newArt, onlySelected)
-  local map = M.loadMap()
+-- Core: derive articulations from existing keyswitches, override the selected
+-- melodic notes with `newArt` (nil = clear; false = leave arts as derived), then
+-- rewrite ALL keyswitch notes for this `map`. Melodic notes are never touched.
+-- `channel` (0-based) is where keyswitch notes are written; nil => KS_CHANNEL.
+-- The UI passes the active bank's articulations as `map` here.
+function M.applyArticulation(take, map, newArt, onlySelected, channel)
+  local ch = channel or KS_CHANNEL
   local ksPitch = {}
   for _, a in ipairs(map) do ksPitch[a.pitch] = a.name end
 
@@ -241,12 +299,47 @@ function M.rebuild(take, newArt, onlySelected)
   end
   for _, k in ipairs(newKs) do
     reaper.MIDI_InsertNote(take, false, false, k.startppq, k.endppq,
-      KS_CHANNEL, k.pitch, k.velocity, true)
+      ch, k.pitch, k.velocity, true)
   end
   reaper.MIDI_Sort(take)
   reaper.Undo_EndBlock("ArticulationRoll: rebuild keyswitches", -1)
 
   return #newKs, #melodic
+end
+
+-- Report the articulation currently on the selected melodic notes for `map`
+-- (derived from existing keyswitches). Returns the name if all selected notes
+-- share one, "" if none, or nil if they differ / nothing is selected. Used by
+-- the UI to highlight the active articulation button.
+function M.selectedArticulation(take, map)
+  local ksPitch = {}
+  for _, a in ipairs(map) do ksPitch[a.pitch] = a.name end
+  local all = readNotes(take)
+  local melodic, ksList = {}, {}
+  for _, n in ipairs(all) do
+    if ksPitch[n.pitch] ~= nil then
+      ksList[#ksList + 1] = { start = n.startppq, name = ksPitch[n.pitch] }
+    else
+      melodic[#melodic + 1] = n
+    end
+  end
+  articulationForMelodic(melodic, ksList)
+  local seen, count = nil, 0
+  for _, n in ipairs(melodic) do
+    if n.sel then
+      count = count + 1
+      local v = n.art or ""
+      if seen == nil then seen = v elseif seen ~= v then return nil end
+    end
+  end
+  if count == 0 then return nil end
+  return seen
+end
+
+-- Back-compat wrapper for the key-bind / menu scripts, which use the plain-text
+-- single-map file. The UI uses M.applyArticulation with a bank map instead.
+function M.rebuild(take, newArt, onlySelected)
+  return M.applyArticulation(take, M.loadMap(), newArt, onlySelected, nil)
 end
 
 --------------------------------------------------------------------------------
