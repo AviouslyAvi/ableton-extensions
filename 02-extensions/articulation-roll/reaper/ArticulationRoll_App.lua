@@ -47,6 +47,38 @@ local function lighten(col)
   return (f(r) << 24) | (f(g) << 16) | (f(b) << 8) | 0xFF
 end
 
+------------------------------------------------------------------- note names --
+-- Match REAPER's note naming: octave = floor(pitch/12) + midioctoffs - 1, so with
+-- the default midioctoffs=0, note 60 = "C4" and 0 = "C-1". Read the offset live
+-- (via SWS) so names match the user's MIDI editor exactly.
+local OCTOFFS = (reaper.SNM_GetIntConfigVar and reaper.SNM_GetIntConfigVar("midioctoffs", 0)) or 0
+local NOTE_NAMES = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }
+local NOTE_BASE  = { C = 0, D = 2, E = 4, F = 5, G = 7, A = 9, B = 11 }
+
+local function noteName(p)
+  return NOTE_NAMES[(p % 12) + 1] .. (math.floor(p / 12) + OCTOFFS - 1)
+end
+
+-- Parse a typed note ("C4", "c#3", "Db2") or a bare MIDI number. Returns a pitch
+-- 0-127, or nil if it doesn't parse / is out of range.
+local function parseNote(s)
+  s = (s or ""):gsub("%s", "")
+  if s == "" then return nil end
+  if s:match("^%-?%d+$") then
+    local v = tonumber(s)
+    if v >= 0 and v <= 127 then return math.floor(v) end
+    return nil
+  end
+  local L, acc, oct = s:match("^([A-Ga-g])([#bsBS]?)(%-?%d+)$")
+  if not L then return nil end
+  local base = NOTE_BASE[L:upper()]
+  local a = acc:lower()
+  if a == "#" or a == "s" then base = base + 1 elseif a == "b" then base = base - 1 end
+  local p = (tonumber(oct) - OCTOFFS + 1) * 12 + base
+  if p < 0 or p > 127 then return nil end
+  return p
+end
+
 ------------------------------------------------------------------- state --
 local cfg      = ART.loadBanks()
 local bankIdx  = 1
@@ -83,7 +115,7 @@ local function drawPlayMode(take)
       ImGui.PushStyleColor(ctx, ImGui.Col_Border, 0xFFFFFFFF)
       ImGui.PushStyleVar(ctx, ImGui.StyleVar_FrameBorderSize, 2)
     end
-    local label = string.format("%s\nks %d  ch %d%s", a.name, a.pitch, a.channel + 1,
+    local label = string.format("%s\n%s  ch %d%s", a.name, noteName(a.pitch), a.channel + 1,
       a.hold and "  H" or "")
     if ImGui.Button(ctx, label .. "##art" .. i, btnW, 46) then
       if take then ART.applyArticulation(take, bank.articulations, a.name, true) end
@@ -123,7 +155,7 @@ local function drawEditMode()
   if ImGui.BeginTable(ctx, "arts", 6, flags) then
     ImGui.TableSetupColumn(ctx, "",      ImGui.TableColumnFlags_WidthFixed, 22)
     ImGui.TableSetupColumn(ctx, "Name")
-    ImGui.TableSetupColumn(ctx, "KS pitch", ImGui.TableColumnFlags_WidthFixed, 80)
+    ImGui.TableSetupColumn(ctx, "KS note", ImGui.TableColumnFlags_WidthFixed, 80)
     ImGui.TableSetupColumn(ctx, "Vel",   ImGui.TableColumnFlags_WidthFixed, 60)
     ImGui.TableSetupColumn(ctx, "Chan",  ImGui.TableColumnFlags_WidthFixed, 70)
     ImGui.TableSetupColumn(ctx, "Hold  x", ImGui.TableColumnFlags_WidthFixed, 70)
@@ -144,8 +176,12 @@ local function drawEditMode()
 
       ImGui.TableSetColumnIndex(ctx, 2)
       ImGui.SetNextItemWidth(ctx, -1)
-      local c2, p = ImGui.InputInt(ctx, "##p" .. i, a.pitch)
-      if c2 then a.pitch = math.max(0, math.min(127, p)); dirty = true end
+      -- Note name field: accepts "C4", "F#3", "Db2", or a bare MIDI number.
+      local c2, txt = ImGui.InputText(ctx, "##p" .. i, noteName(a.pitch))
+      if c2 then local np = parseNote(txt); if np then a.pitch = np; dirty = true end end
+      if ImGui.IsItemHovered(ctx) then
+        ImGui.SetTooltip(ctx, string.format("Keyswitch note (MIDI %d). Type e.g. C4, F#3, Db2.", a.pitch))
+      end
 
       ImGui.TableSetColumnIndex(ctx, 3)
       ImGui.SetNextItemWidth(ctx, -1)

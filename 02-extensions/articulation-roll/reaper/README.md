@@ -50,8 +50,9 @@ the keyswitch note is what actually selects the articulation.
 - **Clear** — send the selected notes back to the unassigned channel (channel 1),
   removing their articulation. **Rebuild** — regenerate keyswitches after you move
   or resize notes.
-- **Edit** checkbox — rename the bank and, per articulation: name, **KS pitch**
-  (the keyswitch note), velocity, **Chan** (its color/channel, 1–16; channel 1 is
+- **Edit** checkbox — rename the bank and, per articulation: name, **KS note**
+  (the keyswitch note, typed as a name like `C4`/`F#3`/`Db2` or a bare MIDI number,
+  matching REAPER's octave display), velocity, **Chan** (its color/channel, 1–16; channel 1 is
   reserved for "unassigned"), and **Hold** (latch vs short trigger). The color
   swatch on each row shows the channel color. **+ Bank / – Bank** manage multiple
   instrument banks. Edits auto-save to `ArticulationRoll_banks.lua`.
