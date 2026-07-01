@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<index version="1" name="Articulation Roll (REAPER)">
+  <category name="MIDI Editor/Articulation Roll">
+    <reapack name="Articulation Roll" type="script" desc="Articulation Roll — keyswitch articulation manager (port of the Ableton extension)">
+      <version name="1.3" author="AviouslyAvi" time="2026-07-01T00:00:00Z">
+        <changelog><![CDATA[1.3 — Ableton feature parity in the app.
+- Auto-pitch: cascade keyswitch notes upward from the first articulation.
+- Dedupe + Legato note actions (ported 1:1 from the Ableton version), undoable.
+- Edit mode: multi-row select (click color chip, shift-click ranges), Select all,
+  Delete selected, and a keyswitch keyboard visualiser.
+1.2 — channel-based articulations (note coloring + bug fix).
+- Each articulation owns a MIDI channel; assigning retags the notes' channel so
+  they recolor (set the MIDI editor note-color dropdown to "Channel").
+- Fixes lingering keyswitch notes when changing articulations on stacked notes.
+- App: color-coded buttons, per-articulation channel + color swatch in Edit.
+1.1 — add the ReaImGui app (dockable banks/articulations panel).
+- ArticulationRoll_App.lua: pick a bank, click to apply, edit names/pitches inline.
+- Multi-bank config (ArticulationRoll_banks.lua), edited entirely in the panel.
+1.0 — Initial ReaPack release.
+- Shared engine (ArticulationRoll_lib.lua) ported 1:1 from the Ableton extension.
+- Pop-up menu action (assign / clear / rebuild / edit map).
+- 8 bindable per-slot assign actions + Clear + Rebuild, all in the MIDI Editor section.]]></changelog>
+
+        <!-- Shared engine: installed alongside the actions, NOT registered as an action. -->
+        <source file="ArticulationRoll_lib.lua">https://raw.githubusercontent.com/AviouslyAvi/ableton-extensions/main/02-extensions/articulation-roll/reaper/ArticulationRoll_lib.lua</source>
+
+        <!-- The app: dockable ReaImGui panel (requires the ReaImGui extension). -->
+        <source file="ArticulationRoll_App.lua" main="main midi_editor">https://raw.githubusercontent.com/AviouslyAvi/ableton-extensions/main/02-extensions/articulation-roll/reaper/ArticulationRoll_App.lua</source>
+
+        <!-- Pop-up menu: available in both the main and MIDI editor action lists. -->
+        <source file="ArticulationRoll_Menu.lua" main="main midi_editor">https://raw.githubusercontent.com/AviouslyAvi/ableton-extensions/main/02-extensions/articulation-roll/reaper/ArticulationRoll_Menu.lua</source>
+
+        <!-- Bindable per-slot assign actions (slot = Nth line of the map file). -->
+        <source file="ArticulationRoll_Assign_Slot1.lua" main="midi_editor">https://raw.githubusercontent.com/AviouslyAvi/ableton-extensions/main/02-extensions/articulation-roll/reaper/ArticulationRoll_Assign_Slot1.lua</source>
+        <source file="ArticulationRoll_Assign_Slot2.lua" main="midi_editor">https://raw.githubusercontent.com/AviouslyAvi/ableton-extensions/main/02-extensions/articulation-roll/reaper/ArticulationRoll_Assign_Slot2.lua</source>
+        <source file="ArticulationRoll_Assign_Slot3.lua" main="midi_editor">https://raw.githubusercontent.com/AviouslyAvi/ableton-extensions/main/02-extensions/articulation-roll/reaper/ArticulationRoll_Assign_Slot3.lua</source>
+        <source file="ArticulationRoll_Assign_Slot4.lua" main="midi_editor">https://raw.githubusercontent.com/AviouslyAvi/ableton-extensions/main/02-extensions/articulation-roll/reaper/ArticulationRoll_Assign_Slot4.lua</source>
+        <source file="ArticulationRoll_Assign_Slot5.lua" main="midi_editor">https://raw.githubusercontent.com/AviouslyAvi/ableton-extensions/main/02-extensions/articulation-roll/reaper/ArticulationRoll_Assign_Slot5.lua</source>
+        <source file="ArticulationRoll_Assign_Slot6.lua" main="midi_editor">https://raw.githubusercontent.com/AviouslyAvi/ableton-extensions/main/02-extensions/articulation-roll/reaper/ArticulationRoll_Assign_Slot6.lua</source>
+        <source file="ArticulationRoll_Assign_Slot7.lua" main="midi_editor">https://raw.githubusercontent.com/AviouslyAvi/ableton-extensions/main/02-extensions/articulation-roll/reaper/ArticulationRoll_Assign_Slot7.lua</source>
+        <source file="ArticulationRoll_Assign_Slot8.lua" main="midi_editor">https://raw.githubusercontent.com/AviouslyAvi/ableton-extensions/main/02-extensions/articulation-roll/reaper/ArticulationRoll_Assign_Slot8.lua</source>
+
+        <!-- Clear + Rebuild. -->
+        <source file="ArticulationRoll_Clear.lua" main="midi_editor">https://raw.githubusercontent.com/AviouslyAvi/ableton-extensions/main/02-extensions/articulation-roll/reaper/ArticulationRoll_Clear.lua</source>
+        <source file="ArticulationRoll_Rebuild.lua" main="midi_editor">https://raw.githubusercontent.com/AviouslyAvi/ableton-extensions/main/02-extensions/articulation-roll/reaper/ArticulationRoll_Rebuild.lua</source>
+      </version>
+
+      <metadata>
+        <description><![CDATA[Articulation Roll for REAPER
+
+Tag melodic notes with an articulation and auto-generate the matching keyswitch
+notes into the take — the Reaticulate-style workflow, ported 1:1 from the Ableton
+"Articulation Roll" extension.
+
+Includes a dockable ReaImGui app (ArticulationRoll_App.lua) — pick a bank, click
+an articulation to apply it, edit bank/articulation names and keyswitch pitches in
+the panel. The app requires the "ReaImGui" extension (install separately via
+ReaPack).
+
+Also installs a pop-up menu plus bindable per-slot assign actions (1-8), Clear,
+and Rebuild in the MIDI Editor action list (no ReaImGui needed; these use the text
+map at <REAPER resource path>/ArticulationRoll_map.txt).]]></description>
+        <link rel="website">https://github.com/AviouslyAvi/ableton-extensions/tree/main/02-extensions/articulation-roll/reaper</link>
+      </metadata>
+    </reapack>
+  </category>
+</index>

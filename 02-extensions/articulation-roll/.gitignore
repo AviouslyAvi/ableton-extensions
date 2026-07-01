@@ -3,3 +3,6 @@ dist/
 .live-storage/
 .env
 *.ablx
+# Local Claude Code + preview artifacts (not for the repo)
+.claude/
+.preview/

@@ -177,27 +177,32 @@
 
     .toolbar {
       gap: 0.3em; padding: 0.32em 0.55em;
-      /* Stay a single, fixed-height row at any window width. Narrow windows
-         scroll the bar horizontally instead of wrapping controls onto new
-         rows (which used to grow the bar's height and shuffle controls). */
-      flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden;
-      scrollbar-width: thin;
+      /* All controls stay visible. The bar wraps when the window is too narrow;
+         with the lean control set (extras now live in the Settings menu) this
+         stays one row at normal widths and at most two when squeezed — never the
+         runaway 3-row stack it used to do. Groups never get squashed mid-row. */
+      flex-wrap: wrap; row-gap: 0.3em;
       background: linear-gradient(180deg,
         oklch(from var(--c-control-bg--500) calc(l * 1.06) c h),
         var(--c-bg--0500));
       box-shadow: inset 0 -1px 0 oklch(from var(--c-control-border) l c h / 0.7);
     }
-    /* Clusters keep their intrinsic width — never squeezed or wrapped. */
+    /* Clusters keep their intrinsic width — never squeezed mid-row. */
     .toolbar .tgroup,
     .toolbar > .alx-button,
     .toolbar .clip-name { flex: 0 0 auto; }
-    /* Thin, unobtrusive horizontal scrollbar (WebKit). */
-    .toolbar::-webkit-scrollbar { height: 6px; }
-    .toolbar::-webkit-scrollbar-thumb {
-      background: oklch(from var(--c-control-border) calc(l * 1.6) c h);
-      border-radius: 3px;
+    /* Narrow windows: drop the uppercase group labels (Tools / Bank / Artic /
+       Grid / Zoom) to reclaim width so the bar stays within two rows. Every
+       control stays — only the redundant text labels go. */
+    @media (max-width: 680px) {
+      .toolbar .glabel { display: none; }
+      .toolbar .tgroup { padding: 0 0.28em; }
+      /* The two long dropdowns dominate the width — cap + ellipsis them so the
+         bar holds to two rows. Still fully usable: the open list shows full
+         names, and the selected value truncates with “…”. */
+      .toolbar #bank-select { max-width: 90px; }
+      .toolbar #art-select { max-width: 84px; }
     }
-    .toolbar::-webkit-scrollbar-track { background: transparent; }
     /* grouped clusters of controls — tight, flat wells like Ableton's control bar */
     .tgroup {
       display: inline-flex; align-items: center; gap: 0.28em;
@@ -246,9 +251,44 @@
       border: 1px solid oklch(from var(--c-control-border) calc(l * 2.2) c h);
       box-shadow: 0 8px 28px rgba(0,0,0,0.6), 0 0 0 1px oklch(from var(--c-control-border) l c h / 0.4);
       padding: 0.8em 0.85em 0.7em;
-      overflow: visible;
+      /* The menu now holds more sections than fit at short window heights,
+         so let the panel itself scroll rather than spilling off-screen. */
+      max-height: calc(100% - 20px); overflow-y: auto; overflow-x: visible;
       background: oklch(from var(--c-bg--0500) calc(l * 1.18) c h);
     }
+    /* Action items (Dedupe / Legato / Edit map / Help) — two-up button grid. */
+    .settings-btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+    .settings-btn-grid .alx-button { justify-content: center; padding: 0 0.3em; }
+    /* Labelled dropdown row (Theme / Colours). */
+    .settings-field-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .settings-field-row label { flex: 0 0 56px; color: var(--c-text-secondary); }
+    .settings-field-row select.alx-input { flex: 1 1 auto; min-width: 0; }
+    /* Per-articulation colour overrides. */
+    .note-colors-list { display: flex; flex-direction: column; gap: 3px; max-height: 168px; overflow-y: auto; }
+    .note-colors-empty { color: var(--c-text-secondary); }
+    .note-color-row { display: flex; align-items: center; gap: 7px; }
+    .note-color-row input[type="color"] {
+      flex: 0 0 auto; width: 26px; height: 20px; padding: 0; cursor: pointer;
+      border: 1px solid var(--c-control-border); border-radius: 4px; background: none;
+    }
+    .note-color-row .ncr-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .note-color-row .ncr-reset { flex: 0 0 auto; visibility: hidden; }
+    .note-color-row.overridden .ncr-reset { visibility: visible; }
+    /* Glow slider row. */
+    .glow-row { display: flex; align-items: center; gap: 9px; }
+    .glow-row input[type="range"] {
+      flex: 1 1 auto; min-width: 0; height: 20px; cursor: pointer;
+      accent-color: var(--c-highlight--primary);
+    }
+    .glow-row .glow-value {
+      flex: 0 0 auto; width: 40px; text-align: right; font-variant-numeric: tabular-nums;
+      color: var(--c-text-secondary);
+    }
+    /* Colour-preset bar (save / recall / delete custom palettes). */
+    .preset-row { display: flex; align-items: center; gap: 4px; }
+    .preset-row .preset-flex { display: flex; gap: 4px; flex: 1 1 auto; min-width: 0; }
+    .preset-row .alx-button { flex: 0 0 auto; }
+    .preset-name { flex: 1 1 auto; min-width: 0; }
     .settings-section { margin-bottom: 0.55em; }
     .settings-section-title {
       font-size: 0.76rem; letter-spacing: 0.05em; text-transform: uppercase;
@@ -420,35 +460,17 @@
         <option value="0.125">1/32</option>
         <option value="0">Off</option>
       </select>
-      <button class="alx-button small" id="zoom-out" title="Zoom out (Ctrl/Cmd + scroll on the grid)">−</button>
-      <button class="alx-button small" id="zoom-in" title="Zoom in (Ctrl/Cmd + scroll on the grid)">+</button>
     </span>
 
     <span class="tgroup">
-      <span class="glabel">Colors</span>
-      <select class="alx-input" id="colors-select" title="Articulation colour scheme — the palette used to colour notes, the Key legend and the lanes. Independent of the visual Theme.">
-        <option value="Spectrum">Spectrum</option>
-        <option value="Vivid">Vivid</option>
-        <option value="Pastel">Pastel</option>
-      </select>
-    </span>
-
-    <span class="tgroup">
-      <span class="glabel">Theme</span>
-      <select class="alx-input" id="theme-select" title="Visual theme — explore the makeover directions. Functionality is identical across all themes.">
-        <option value="Studio">Studio</option>
-        <option value="Ableton+">Ableton+</option>
-        <option value="Warm">Warm</option>
-      </select>
+      <span class="glabel">Zoom</span>
+      <button class="alx-button small" id="zoom-out" title="Zoom out — show more of the clip (Ctrl/Cmd + scroll on the grid). Affects horizontal zoom only; the note Grid resolution is set separately.">−</button>
+      <button class="alx-button small" id="zoom-in" title="Zoom in — magnify the clip (Ctrl/Cmd + scroll on the grid). Affects horizontal zoom only; the note Grid resolution is set separately.">+</button>
     </span>
 
     <span class="spacer"></span>
 
-    <button class="alx-button small" id="dedupe-btn" title="Delete exact duplicate notes (same pitch, start AND length) AND any shorter note that overlaps a longer note at the same pitch (covered or partially behind it). Keeps the longer note. Notes that only touch edges are left alone. Undoable.">Dedupe</button>
-    <button class="alx-button small" id="legato-btn" title="Legato: stretch or shorten notes so each ends exactly where the next note begins. Acts on the selected notes, or every note if none are selected. Undoable.">Legato</button>
-    <button class="alx-button small" id="edit-map" title="Edit the articulation → keyswitch-pitch map.">Edit map…</button>
-    <button class="alx-button small" id="help-btn" title="Keyboard shortcuts & how-to (press ? )">? Help</button>
-    <button class="alx-button small icon-btn" id="settings-btn" title="Grid settings">
+    <button class="alx-button small icon-btn" id="settings-btn" title="Menu — appearance &amp; theme, note colours, articulation map, dedupe / legato, help">
       <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z"/></svg>
     </button>
 
@@ -554,10 +576,60 @@
     <!-- Grid settings panel -->
     <div class="overlay settings-panel" id="settings-overlay">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6em;">
-        <h1>Grid settings</h1>
+        <h1>Settings</h1>
         <button class="alx-button small icon-btn close-btn" id="settings-close" title="Close (Esc)">
           <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l10 10M13 3L3 13"/></svg>
         </button>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Actions</div>
+        <div class="settings-btn-grid">
+          <button class="alx-button small" id="dedupe-btn" title="Delete exact duplicate notes (same pitch, start AND length) AND any shorter note that overlaps a longer note at the same pitch (covered or partially behind it). Keeps the longer note. Notes that only touch edges are left alone. Undoable.">Dedupe</button>
+          <button class="alx-button small" id="legato-btn" title="Legato: stretch or shorten notes so each ends exactly where the next note begins. Acts on the selected notes, or every note if none are selected. Undoable.">Legato</button>
+          <button class="alx-button small" id="edit-map" title="Edit the articulation → keyswitch-pitch map.">Edit map…</button>
+          <button class="alx-button small" id="help-btn" title="Keyboard shortcuts & how-to (press ? )">? Help</button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Appearance</div>
+        <div class="settings-field-row">
+          <label for="theme-select">Theme</label>
+          <select class="alx-input" id="theme-select" title="Visual theme — explore the makeover directions. Functionality is identical across all themes.">
+            <option value="Studio">Studio</option>
+            <option value="Ableton+">Ableton+</option>
+            <option value="Warm">Warm</option>
+          </select>
+        </div>
+        <div class="settings-field-row">
+          <label for="colors-select">Colours</label>
+          <select class="alx-input" id="colors-select" title="Articulation colour scheme — built-in palettes plus any presets you save. Choosing a saved preset also restores its per-note colours. Independent of the visual Theme.">
+            <option value="Spectrum">Spectrum</option>
+            <option value="Vivid">Vivid</option>
+            <option value="Pastel">Pastel</option>
+          </select>
+        </div>
+        <div class="settings-field-row preset-row" id="preset-row">
+          <label>Presets</label>
+          <div class="preset-flex" id="preset-actions">
+            <button class="alx-button small" id="preset-save" title="Save the current colour scheme and all per-note colours as a reusable preset.">Save current…</button>
+            <button class="alx-button small" id="preset-delete" title="Delete the selected custom preset." disabled>Delete</button>
+          </div>
+          <div class="preset-flex" id="preset-name-edit" style="display:none;">
+            <input class="alx-input preset-name" id="preset-name" type="text" maxlength="32" placeholder="Preset name" title="Name this preset, then press Enter or ✓ to save.">
+            <button class="alx-button small" id="preset-name-ok" title="Save preset">✓</button>
+            <button class="alx-button small" id="preset-name-cancel" title="Cancel">✕</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title" style="display:flex;align-items:center;justify-content:space-between;">
+          <span>Note colours</span>
+          <button class="alx-button small" id="note-colors-reset" title="Clear every per-articulation colour override and fall back to the chosen colour scheme.">Reset</button>
+        </div>
+        <div id="note-colors-list" class="note-colors-list"></div>
       </div>
 
       <div class="settings-section">
@@ -589,8 +661,16 @@
         </div>
       </div>
 
+      <div class="settings-section">
+        <div class="settings-section-title">Glow</div>
+        <div class="glow-row">
+          <input type="range" id="glow-slider" min="0" max="2.5" step="0.05" value="1" title="Note glow intensity — how much each note and articulation blooms. 0% = flat, 100% = default.">
+          <span class="glow-value" id="glow-value">100%</span>
+        </div>
+      </div>
+
       <div style="margin-top:0.65em;display:flex;justify-content:flex-end;">
-        <button class="alx-button small" id="settings-reset">Reset defaults</button>
+        <button class="alx-button small" id="settings-reset" title="Reset row height, piano-key width, control-lane size and glow to defaults.">Reset layout</button>
       </div>
     </div>
   </div>
@@ -1058,6 +1138,7 @@
     const RULER = 22, LANE = 48;
     let GUTTER = 44;               // piano key column width — user-settable
     let ROW_H = 16;                // pitch row height — user-settable
+    const ROW_MIN = 6, ROW_MAX = 48;  // Alt/Option+scroll row-height bounds
     const MIN_PPB = 8, MAX_PPB = 400;
     const BEATS_PER_BAR = 4;           // display default (4/4)
     const EDGE = 8;                    // px hot-zone for the resize handle
@@ -1066,15 +1147,28 @@
     const laneMaxH = () => Math.max(40, viewH - RULER - LANE - 90);
     let VEL_LANE = 56;                 // velocity lane height — user-settable (0 = hidden)
     const BOTTOM = () => LANE + VEL_LANE; // bottom chrome below the grid (vel + artic lanes)
+    // Global glow multiplier (cosmetic) — scales every note/articulation bloom.
+    // 0 = flat (no shadow), 1 = default, up to GLOW_MAX for heavy bloom.
+    const GLOW_MAX = 2.5;
+    let glowAmount = 1;
     // Restore persisted grid settings before the first resize()
     (function() {
       try {
         const _s = JSON.parse(localStorage.getItem("artroll-grid-v1") || "{}");
-        if (_s.rowH > 0) ROW_H = _s.rowH;
+        if (_s.rowH > 0) ROW_H = Math.max(ROW_MIN, Math.min(ROW_MAX, _s.rowH));
         if (_s.gutter > 0) GUTTER = _s.gutter;
         if (typeof _s.velLane === "number") VEL_LANE = _s.velLane;
       } catch(e) {}
+      try {
+        const g = parseFloat(localStorage.getItem("artroll-glow-v1"));
+        if (Number.isFinite(g)) glowAmount = Math.max(0, Math.min(GLOW_MAX, g));
+      } catch(e) {}
     })();
+    // Single source of truth for persisting layout — called by the settings panel
+    // and by the Alt/Option+scroll row-height gesture.
+    function persistGrid() {
+      try { localStorage.setItem("artroll-grid-v1", JSON.stringify({ rowH: ROW_H, gutter: GUTTER, velLane: VEL_LANE })); } catch(e) {}
+    }
 
     // ---- State ----
     // (clipDuration is declared above, near CLIP_START, for the transport block.)
@@ -1381,12 +1475,65 @@
       if (s && COLOR_SCHEMES[s]) colorScheme = s;
     } catch (e) {}
 
+    // Per-articulation colour overrides, keyed by articulation NAME (so they
+    // follow the articulation across banks). A "#rrggbb" here wins over the
+    // active scheme. Managed from the Settings menu's "Note colours" section.
+    let artColorOverrides = {};
+    try { artColorOverrides = JSON.parse(localStorage.getItem("artroll-artcolors-v1") || "{}") || {}; } catch (e) { artColorOverrides = {}; }
+    function saveArtColors() { try { localStorage.setItem("artroll-artcolors-v1", JSON.stringify(artColorOverrides)); } catch (e) {} }
+
+    // User colour presets — a named snapshot of { base scheme + per-note overrides }.
+    // Built-in schemes (Spectrum/Vivid/Pastel) are NOT presets; presets layer on top
+    // so people can save their own palettes. Persisted as an array under one key.
+    let colorPresets = [];
+    try {
+      const p = JSON.parse(localStorage.getItem("artroll-colorpresets-v1") || "[]");
+      if (Array.isArray(p)) colorPresets = p.filter(x => x && typeof x.name === "string");
+    } catch (e) { colorPresets = []; }
+    function saveColorPresets() { try { localStorage.setItem("artroll-colorpresets-v1", JSON.stringify(colorPresets)); } catch (e) {} }
+    let activePreset = null;   // name of the currently-applied user preset, or null
+    try { const ap = localStorage.getItem("artroll-activepreset-v1"); if (ap) activePreset = ap; } catch (e) {}
+    function setActivePreset(n) {
+      activePreset = n || null;
+      try { activePreset ? localStorage.setItem("artroll-activepreset-v1", activePreset) : localStorage.removeItem("artroll-activepreset-v1"); } catch (e) {}
+    }
+    // Set by the settings panel so preset changes elsewhere can refresh its swatches.
+    let syncSettingsPanel = () => {};
+    const hexToRgba = (hex, alpha) => {
+      const n = parseInt(hex.slice(1), 16);
+      return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha == null ? 1 : alpha})`;
+    };
+    // Resolve any CSS colour string (hsl / oklch / rgb) to "#rrggbb" by painting
+    // a 1×1 canvas and reading the pixel back — robust across colour spaces and
+    // matches exactly how the grid renders these colours.
+    const _hexCanvas = document.createElement("canvas"); _hexCanvas.width = _hexCanvas.height = 1;
+    const _hexCtx = _hexCanvas.getContext("2d", { willReadFrequently: true });
+    function cssColorToHex(c) {
+      _hexCtx.clearRect(0, 0, 1, 1);
+      _hexCtx.fillStyle = "#000"; _hexCtx.fillStyle = c;
+      _hexCtx.fillRect(0, 0, 1, 1);
+      const d = _hexCtx.getImageData(0, 0, 1, 1).data;
+      return "#" + [d[0], d[1], d[2]].map(x => x.toString(16).padStart(2, "0")).join("");
+    }
+
     function artColor(name, alpha) {
+      // A per-articulation override wins over the scheme (and applies even to
+      // notes whose articulation isn't in the active bank).
+      const ov = artColorOverrides[name];
+      if (ov) return hexToRgba(ov, alpha);
       const entry = artMap.find(a => a.name === name);
       // Note carries an articulation not present in the active bank → neutral grey
       if (!entry) return `oklch(55% 0 0 / ${alpha == null ? 1 : alpha})`;
       const i = entry._colorIdx ?? artMap.indexOf(entry);
       return (COLOR_SCHEMES[colorScheme] || COLOR_SCHEMES.Spectrum)(i, alpha);
+    }
+    // The scheme colour for an articulation, ignoring any override — used to seed
+    // the colour picker so it opens on the current scheme colour.
+    function artSchemeColor(name) {
+      const entry = artMap.find(a => a.name === name);
+      if (!entry) return "oklch(55% 0 0 / 1)";
+      const i = entry._colorIdx ?? artMap.indexOf(entry);
+      return (COLOR_SCHEMES[colorScheme] || COLOR_SCHEMES.Spectrum)(i, 1);
     }
 
     // ---- Drawing ----
@@ -1548,7 +1695,7 @@
       const glowCol = o.art ? artColor(o.art, 1) : accent;
       // outer bloom
       ctx.shadowColor = glowCol;
-      ctx.shadowBlur = ((3 + velN * 13) * (selected ? 1.6 : 1) + (opts.lift ? 9 : 0) + (opts.pulse || 0)) * alpha;
+      ctx.shadowBlur = ((3 + velN * 13) * (selected ? 1.6 : 1) + (opts.lift ? 9 : 0) + (opts.pulse || 0)) * alpha * glowAmount;
       ctx.fillStyle = fill;
       rrect(x, ny, w, nh, r); ctx.fill();
       // brighter inner core for loud / pulsing notes
@@ -1707,7 +1854,7 @@
         const glowCol = artColor(r.art, 1);
         // outer bloom
         ctx.shadowColor = glowCol;
-        ctx.shadowBlur = 12;
+        ctx.shadowBlur = 12 * glowAmount;
         ctx.fillStyle = artColor(r.art, 0.92);
         rrect(x, ry, w, rh, SPAN_R); ctx.fill();
         ctx.shadowBlur = 0;
@@ -1726,7 +1873,7 @@
       if (previewPaint) {
         const x = beatToX(previewPaint.s), w = Math.max(2, (previewPaint.e - previewPaint.s) * pxPerBeat);
         const glowCol = artColor(currentArt, 1);
-        ctx.shadowColor = glowCol; ctx.shadowBlur = 10;
+        ctx.shadowColor = glowCol; ctx.shadowBlur = 10 * glowAmount;
         ctx.fillStyle = artColor(currentArt, 0.5);
         rrect(x, ry, w, rh, SPAN_R); ctx.fill();
         ctx.shadowBlur = 0;
@@ -1767,7 +1914,7 @@
         ctx.beginPath(); ctx.moveTo(px, base); ctx.lineTo(px, y); ctx.stroke();
         // glow the head so it reads as the same lit material as the notes
         ctx.fillStyle = col;
-        ctx.shadowColor = col; ctx.shadowBlur = selected ? 9 : 6;
+        ctx.shadowColor = col; ctx.shadowBlur = (selected ? 9 : 6) * glowAmount;
         ctx.beginPath(); ctx.arc(px, y, selected ? 3 : 2.2, 0, Math.PI * 2); ctx.fill();
         ctx.shadowBlur = 0;
       }
@@ -3032,13 +3179,30 @@
     });
 
     // Wheel (Ableton parity): plain = vertical scroll, Shift = horizontal scroll,
-    // Cmd/Ctrl = horizontal zoom about the cursor (ROW_H fixed — no pitch zoom).
-    // Scroll-up/away zooms in. The zoom factor scales with the scroll magnitude
+    // Cmd/Ctrl = horizontal zoom about the cursor (no pitch zoom), Alt/Option =
+    // change pitch-row height about the cursor (vertical "zoom"). Scroll-up/away
+    // zooms in / grows rows. The factor scales with the scroll magnitude
     // (normalized across pixel/line/page delta modes and clamped) so a trackpad —
     // which fires many tiny events per gesture — doesn't compound into a huge jump.
     canvas.addEventListener("wheel", e => {
       e.preventDefault();
-      if (e.ctrlKey || e.metaKey) {
+      if (e.altKey && !e.ctrlKey && !e.metaKey) {
+        // Alt/Option+scroll → row height, anchored on the pitch under the cursor.
+        const rect = canvas.getBoundingClientRect();
+        const y = e.clientY - rect.top;
+        const rowsFromTop = (y - RULER + scrollY) / ROW_H;   // continuous row index under cursor
+        let dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
+        dy = Math.max(-120, Math.min(120, dy));
+        let h = ROW_H * Math.exp(-dy * 0.0100);
+        // guarantee at least 1px of travel so slow trackpad ticks still register
+        if (Math.round(h) === ROW_H && dy !== 0) h = ROW_H + (dy < 0 ? 1 : -1);
+        h = Math.max(ROW_MIN, Math.min(ROW_MAX, Math.round(h)));
+        if (h !== ROW_H) {
+          scrollY = rowsFromTop * h - (y - RULER);   // keep cursor pitch fixed
+          ROW_H = h;
+          persistGrid();
+        }
+      } else if (e.ctrlKey || e.metaKey) {
         const rect = canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const beatAt = xToBeat(x);
@@ -3293,16 +3457,103 @@
 
     // Colour-scheme switcher — recolors the articulation palette only (notes,
     // Key legend, lanes, keyswitch visualiser). Independent of the UI Theme.
+    // The dropdown holds the built-in schemes plus any user presets; selecting a
+    // preset (value "preset:<name>") also restores that preset's per-note colours.
     const colorsSelect = document.getElementById("colors-select");
+    const presetDelete = document.getElementById("preset-delete");
+    const BUILT_IN_SCHEMES = ["Spectrum", "Vivid", "Pastel"];
+    // Rebuild the <select> from the built-ins + the saved-preset list, then sync
+    // the current selection and the Delete button's enabled state.
+    function rebuildColorsSelect() {
+      if (!colorsSelect) return;
+      // Drop a stale active preset (e.g. deleted in a prior session).
+      if (activePreset && !colorPresets.some(p => p.name === activePreset)) setActivePreset(null);
+      colorsSelect.innerHTML = "";
+      for (const s of BUILT_IN_SCHEMES) {
+        const o = document.createElement("option");
+        o.value = s; o.textContent = s;
+        colorsSelect.appendChild(o);
+      }
+      if (colorPresets.length) {
+        const grp = document.createElement("optgroup");
+        grp.label = "Your presets";
+        colorPresets.forEach(p => {
+          const o = document.createElement("option");
+          o.value = "preset:" + p.name; o.textContent = p.name;
+          grp.appendChild(o);
+        });
+        colorsSelect.appendChild(grp);
+      }
+      colorsSelect.value = activePreset ? "preset:" + activePreset : colorScheme;
+      if (presetDelete) presetDelete.disabled = !activePreset;
+    }
+    // Apply a saved preset by name: restore its base scheme + per-note overrides.
+    function applyPreset(name) {
+      const p = colorPresets.find(x => x.name === name);
+      if (!p) return;
+      colorScheme = COLOR_SCHEMES[p.scheme] ? p.scheme : "Spectrum";
+      artColorOverrides = { ...(p.overrides || {}) };
+      setActivePreset(name);
+      try { localStorage.setItem("artroll-colors-v1", colorScheme); } catch (e) {}
+      saveArtColors();
+      rebuildColorsSelect();
+      renderLegend(); syncSettingsPanel(); requestDraw();
+    }
     if (colorsSelect) {
-      colorsSelect.value = colorScheme;
+      rebuildColorsSelect();
       colorsSelect.addEventListener("change", () => {
-        colorScheme = COLOR_SCHEMES[colorsSelect.value] ? colorsSelect.value : "Spectrum";
+        const v = colorsSelect.value;
+        if (v.startsWith("preset:")) { applyPreset(v.slice(7)); return; }
+        // built-in scheme: leave per-note overrides as-is (overrides win over scheme)
+        colorScheme = COLOR_SCHEMES[v] ? v : "Spectrum";
+        setActivePreset(null);
         try { localStorage.setItem("artroll-colors-v1", colorScheme); } catch (e) {}
-        renderLegend();
-        requestDraw();
+        if (presetDelete) presetDelete.disabled = true;
+        renderLegend(); requestDraw();
       });
     }
+
+    // ---- Colour-preset save / delete UI ----
+    const presetSaveBtn = document.getElementById("preset-save");
+    const presetActions = document.getElementById("preset-actions");
+    const presetNameEdit = document.getElementById("preset-name-edit");
+    const presetNameInput = document.getElementById("preset-name");
+    function showPresetNameEntry(show) {
+      if (!presetActions || !presetNameEdit) return;
+      presetActions.style.display = show ? "none" : "flex";
+      presetNameEdit.style.display = show ? "flex" : "none";
+      if (show && presetNameInput) {
+        presetNameInput.value = activePreset || "";
+        presetNameInput.focus(); presetNameInput.select();
+      }
+    }
+    // Capture the live scheme + per-note overrides under a name (overwrites a
+    // same-named preset). Selecting it later restores exactly this state.
+    function commitPreset() {
+      const name = (presetNameInput && presetNameInput.value || "").trim().slice(0, 32);
+      if (!name) { showPresetNameEntry(false); return; }
+      const snap = { name, scheme: colorScheme, overrides: { ...artColorOverrides } };
+      const i = colorPresets.findIndex(p => p.name === name);
+      if (i >= 0) colorPresets[i] = snap; else colorPresets.push(snap);
+      saveColorPresets();
+      setActivePreset(name);
+      rebuildColorsSelect();
+      showPresetNameEntry(false);
+    }
+    if (presetSaveBtn) presetSaveBtn.addEventListener("click", () => showPresetNameEntry(true));
+    document.getElementById("preset-name-ok")?.addEventListener("click", commitPreset);
+    document.getElementById("preset-name-cancel")?.addEventListener("click", () => showPresetNameEntry(false));
+    if (presetNameInput) presetNameInput.addEventListener("keydown", e => {
+      if (e.key === "Enter") { e.preventDefault(); commitPreset(); }
+      else if (e.key === "Escape") { e.preventDefault(); showPresetNameEntry(false); }
+    });
+    if (presetDelete) presetDelete.addEventListener("click", () => {
+      if (!activePreset) return;
+      colorPresets = colorPresets.filter(p => p.name !== activePreset);
+      saveColorPresets();
+      setActivePreset(null);
+      rebuildColorsSelect();
+    });
 
     // Theme switcher — purely visual. Themes override the --p-live-* base vars on
     // <html>; the --c-* tokens are oklch-derived from those, so the whole UI (and
@@ -3556,6 +3807,7 @@
     };
 
     document.getElementById("dedupe-btn").onclick = () => {
+      closeSettings();
       const pre = snapState();
       const toRemove = new Set();
       // 1) EXACT duplicates: same pitch, same start AND same length. These stack
@@ -3593,6 +3845,7 @@
     };
 
     document.getElementById("legato-btn").onclick = () => {
+      closeSettings();
       const pre = snapState();
       // Make each note reach exactly to the next note's start (nearest later
       // start on ANY pitch) — stretching short notes and shortening overlapping
@@ -3615,6 +3868,7 @@
       requestDraw();
     };
     document.getElementById("edit-map").onclick = () => {
+      closeSettings();
       if (mapOverlay.classList.contains("show")) closeMapEditor();
       else openMapEditor();
     };
@@ -4094,9 +4348,7 @@
     // ---- Grid settings panel wiring ----
     (function() {
       const GRID_DEFAULTS = { rowH: 16, gutter: 44, velLane: 56 };
-      function saveGridSettings() {
-        try { localStorage.setItem("artroll-grid-v1", JSON.stringify({ rowH: ROW_H, gutter: GUTTER, velLane: VEL_LANE })); } catch(e) {}
-      }
+      const saveGridSettings = persistGrid;
       function refreshSeg(segId, val) {
         document.getElementById(segId).querySelectorAll("button").forEach(b => b.classList.toggle("s-active", +b.dataset.val === val));
       }
@@ -4104,7 +4356,55 @@
         refreshSeg("row-height-seg", ROW_H);
         refreshSeg("piano-width-seg", GUTTER);
         refreshSeg("vel-lane-seg", VEL_LANE);
+        const gs = document.getElementById("glow-slider");
+        if (gs) { gs.value = String(glowAmount); document.getElementById("glow-value").textContent = Math.round(glowAmount * 100) + "%"; }
+        renderNoteColors();
       }
+      // Build the per-articulation colour list for the current bank.
+      function renderNoteColors() {
+        const host = document.getElementById("note-colors-list");
+        if (!host) return;
+        host.innerHTML = "";
+        const named = artMap.filter(a => a.name && a.name !== "New");
+        if (!named.length) {
+          const e = document.createElement("span");
+          e.className = "note-colors-empty";
+          e.textContent = "No articulations in this bank.";
+          host.appendChild(e);
+          return;
+        }
+        named.forEach(a => {
+          const row = document.createElement("div");
+          row.className = "note-color-row" + (artColorOverrides[a.name] ? " overridden" : "");
+          const inp = document.createElement("input");
+          inp.type = "color";
+          inp.value = cssColorToHex(artColorOverrides[a.name] || artSchemeColor(a.name));
+          inp.title = "Colour for “" + a.name + "” notes";
+          const nm = document.createElement("span");
+          nm.className = "ncr-name"; nm.textContent = a.name;
+          const rst = document.createElement("button");
+          rst.className = "alx-button small ncr-reset";
+          rst.textContent = "↺"; rst.title = "Revert “" + a.name + "” to the colour scheme";
+          inp.addEventListener("input", () => {
+            artColorOverrides[a.name] = inp.value;
+            saveArtColors(); row.classList.add("overridden");
+            renderLegend(); requestDraw();
+          });
+          rst.addEventListener("click", () => {
+            delete artColorOverrides[a.name];
+            saveArtColors(); renderNoteColors();
+            renderLegend(); requestDraw();
+          });
+          row.append(inp, nm, rst);
+          host.appendChild(row);
+        });
+      }
+      const _ncReset = document.getElementById("note-colors-reset");
+      if (_ncReset) _ncReset.onclick = () => {
+        artColorOverrides = {};
+        saveArtColors(); renderNoteColors();
+        renderLegend(); requestDraw();
+      };
       function applyAndRedraw() { resize(); clampScroll(); requestDraw(); }
       function wireSeg(segId, setVal) {
         document.getElementById(segId).querySelectorAll("button").forEach(btn => {
@@ -4115,17 +4415,34 @@
       wireSeg("piano-width-seg", v => { GUTTER = v; });
       wireSeg("vel-lane-seg", v => { VEL_LANE = v; });
 
+      // Let preset changes (made via the Colours dropdown) refresh this panel.
+      syncSettingsPanel = refreshSettingsUI;
+
+      // Glow slider — live, persisted. Pure cosmetic redraw (no layout).
+      const glowSlider = document.getElementById("glow-slider");
+      const glowValue = document.getElementById("glow-value");
+      if (glowSlider) {
+        glowSlider.addEventListener("input", () => {
+          glowAmount = Math.max(0, Math.min(GLOW_MAX, parseFloat(glowSlider.value) || 0));
+          if (glowValue) glowValue.textContent = Math.round(glowAmount * 100) + "%";
+          try { localStorage.setItem("artroll-glow-v1", String(glowAmount)); } catch (e) {}
+          requestDraw();
+        });
+      }
+
       const settingsBtn = document.getElementById("settings-btn");
       const settingsOverlay = document.getElementById("settings-overlay");
       settingsBtn.onclick = () => {
         const opening = !settingsOverlay.classList.contains("show");
         if (opening) { closeHelp(); closeMapEditor(); }
         settingsOverlay.classList.toggle("show", opening);
-        if (opening) refreshSettingsUI();
+        if (opening) { showPresetNameEntry(false); refreshSettingsUI(); }
       };
       document.getElementById("settings-close").onclick = () => settingsOverlay.classList.remove("show");
       document.getElementById("settings-reset").onclick = () => {
         ROW_H = GRID_DEFAULTS.rowH; GUTTER = GRID_DEFAULTS.gutter; VEL_LANE = GRID_DEFAULTS.velLane;
+        glowAmount = 1;
+        try { localStorage.setItem("artroll-glow-v1", "1"); } catch (e) {}
         saveGridSettings(); refreshSettingsUI(); applyAndRedraw();
       };
     })();
